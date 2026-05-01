@@ -1,1 +1,596 @@
+/* ═══════════════════════════════════════════════════
+   NEON HOKEY — style.css
+   Retro-futuristik neon tasarım sistemi
+   Font: Orbitron (Google Fonts CDN'siz) → system fallback
+         + özel @font-face alternatifi olarak monospace
+   ═══════════════════════════════════════════════════ */
 
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+
+/* ── CSS DEĞİŞKENLERİ ────────────────────────────── */
+:root {
+  --bg:          #0D0D0D;
+  --bg2:         #111122;
+  --cyan:        #00FFFF;
+  --pink:        #FF6EC7;
+  --green:       #00FF88;
+  --gold:        #FFD700;
+  --red:         #FF4444;
+  --orange:      #FF6B00;
+  --white:       #F0F0FF;
+  --dim:         #3A3A5C;
+  --glow-cyan:   0 0 8px #00FFFF, 0 0 20px #00FFFF55, 0 0 40px #00FFFF22;
+  --glow-pink:   0 0 8px #FF6EC7, 0 0 20px #FF6EC755, 0 0 40px #FF6EC722;
+  --glow-green:  0 0 8px #00FF88, 0 0 20px #00FF8855, 0 0 40px #00FF8822;
+  --glow-gold:   0 0 8px #FFD700, 0 0 20px #FFD70055;
+  --font-display: 'Orbitron', 'Share Tech Mono', 'Courier New', monospace;
+  --font-mono:    'Share Tech Mono', 'Courier New', monospace;
+  --transition:  0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── RESET & BASE ────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--white);
+  font-family: var(--font-mono);
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* ── EKRAN SİSTEMİ ───────────────────────────────── */
+.screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.45s ease;
+}
+.screen.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* ═══════════════════════════════════════════════════
+   ANA MENÜ
+   ═══════════════════════════════════════════════════ */
+#screen-menu { background: var(--bg); }
+
+/* Arka plan parçacık katmanı */
+.bg-particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.particle {
+  position: absolute;
+  width: 2px; height: 2px;
+  border-radius: 50%;
+  animation: particle-float linear infinite;
+}
+@keyframes particle-float {
+  0%   { transform: translateY(100vh) scale(0); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 0.6; }
+  100% { transform: translateY(-10vh) scale(1); opacity: 0; }
+}
+
+/* Grid çizgisi arka planı */
+#screen-menu::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,255,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,255,0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 40%, transparent 100%);
+}
+
+.menu-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 36px;
+  padding: 40px 24px;
+  width: min(480px, 96vw);
+}
+
+/* LOGO */
+.logo-wrap { text-align: center; }
+
+.logo-hex {
+  font-size: clamp(56px, 15vw, 80px);
+  color: var(--cyan);
+  text-shadow: var(--glow-cyan);
+  animation: hex-pulse 2.4s ease-in-out infinite;
+  line-height: 1;
+}
+@keyframes hex-pulse {
+  0%, 100% { text-shadow: var(--glow-cyan); transform: scale(1); }
+  50%       { text-shadow: 0 0 16px #00FFFF, 0 0 48px #00FFFF88, 0 0 80px #00FFFF44; transform: scale(1.06); }
+}
+
+.logo-title {
+  font-family: var(--font-display);
+  font-size: clamp(40px, 12vw, 72px);
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: 6px;
+  color: var(--white);
+  text-shadow: 0 0 30px rgba(255,255,255,0.15);
+}
+.logo-title span {
+  color: var(--cyan);
+  text-shadow: var(--glow-cyan);
+}
+
+.logo-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 4px;
+  color: var(--dim);
+  margin-top: 8px;
+}
+
+/* PUAN ROZETI */
+.score-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 28px;
+  border: 1px solid var(--gold);
+  border-radius: 40px;
+  font-size: 15px;
+  color: var(--gold);
+  text-shadow: var(--glow-gold);
+  box-shadow: 0 0 12px rgba(255,215,0,0.2), inset 0 0 20px rgba(255,215,0,0.05);
+  background: rgba(255,215,0,0.04);
+}
+.score-badge-icon { font-size: 20px; animation: spin-slow 6s linear infinite; }
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+
+/* BUTONLAR */
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 320px;
+}
+
+.btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 28px;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: var(--transition);
+  overflow: hidden;
+}
+.btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.5s;
+}
+.btn:hover::before { transform: translateX(100%); }
+
+.btn-glyph { font-size: 16px; }
+
+.btn-primary {
+  background: rgba(0,255,255,0.08);
+  border: 1.5px solid var(--cyan);
+  color: var(--cyan);
+  box-shadow: 0 0 12px rgba(0,255,255,0.2), inset 0 0 20px rgba(0,255,255,0.04);
+}
+.btn-primary:hover {
+  background: rgba(0,255,255,0.16);
+  box-shadow: 0 0 24px rgba(0,255,255,0.5), inset 0 0 30px rgba(0,255,255,0.08);
+  transform: translateY(-2px);
+}
+.btn-primary:active { transform: translateY(0); }
+
+.btn-secondary {
+  background: rgba(255,110,199,0.08);
+  border: 1.5px solid var(--pink);
+  color: var(--pink);
+  box-shadow: 0 0 12px rgba(255,110,199,0.2), inset 0 0 20px rgba(255,110,199,0.04);
+}
+.btn-secondary:hover {
+  background: rgba(255,110,199,0.16);
+  box-shadow: 0 0 24px rgba(255,110,199,0.5);
+  transform: translateY(-2px);
+}
+
+.btn-danger {
+  background: rgba(255,107,0,0.08);
+  border: 1.5px solid var(--orange);
+  color: var(--orange);
+  box-shadow: 0 0 12px rgba(255,107,0,0.2);
+}
+.btn-danger:hover {
+  background: rgba(255,107,0,0.16);
+  box-shadow: 0 0 24px rgba(255,107,0,0.5);
+  transform: translateY(-2px);
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1.5px solid var(--dim);
+  color: #888;
+}
+.btn-ghost:hover {
+  border-color: var(--white);
+  color: var(--white);
+  transform: translateY(-2px);
+}
+
+.menu-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #444;
+}
+
+/* ═══════════════════════════════════════════════════
+   OYUN EKRANI
+   ═══════════════════════════════════════════════════ */
+#screen-game {
+  background: var(--bg);
+  justify-content: flex-start;
+  padding: 0;
+}
+
+/* HUD */
+.hud {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px 8px;
+  background: rgba(0,0,0,0.6);
+  border-bottom: 1px solid rgba(0,255,255,0.1);
+  position: relative;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.hud-side {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.hud-ai { flex-direction: row-reverse; }
+
+.hud-label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: #555;
+}
+
+.hud-score {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 8vw, 42px);
+  font-weight: 900;
+  line-height: 1;
+  transition: transform 0.15s;
+}
+.hud-ai .hud-score   { color: var(--pink);  text-shadow: var(--glow-pink); }
+.hud-player .hud-score { color: var(--cyan); text-shadow: var(--glow-cyan); }
+.hud-score.pop { transform: scale(1.4); }
+
+.hud-center {
+  text-align: center;
+  line-height: 1;
+}
+.hud-vs {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 4px;
+  color: #333;
+}
+.hud-goal-target {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #444;
+}
+
+/* Canvas */
+#game-canvas {
+  display: block;
+  flex: 1;
+  width: 100%;
+  touch-action: none;
+}
+
+/* Gol Flash */
+.goal-flash {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s;
+  z-index: 20;
+}
+.goal-flash.show { opacity: 1; }
+
+.goal-text {
+  font-family: var(--font-display);
+  font-size: clamp(52px, 18vw, 100px);
+  font-weight: 900;
+  letter-spacing: 8px;
+  animation: goal-bounce 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes goal-bounce {
+  0%   { transform: scale(0.3) rotate(-10deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+/* Geri butonu */
+.btn-back {
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  border: 1px solid #333;
+  background: rgba(0,0,0,0.7);
+  color: #666;
+  font-size: 16px;
+  cursor: pointer;
+  z-index: 30;
+  display: flex; align-items: center; justify-content: center;
+  transition: var(--transition);
+}
+.btn-back:hover { border-color: var(--red); color: var(--red); }
+
+/* ═══════════════════════════════════════════════════
+   SONUÇ EKRANI
+   ═══════════════════════════════════════════════════ */
+#screen-result {
+  background: radial-gradient(ellipse at 50% 30%, #0d1a2e 0%, var(--bg) 70%);
+}
+
+.result-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 40px 24px;
+  width: min(480px, 96vw);
+  text-align: center;
+}
+
+.result-icon {
+  font-size: clamp(60px, 18vw, 90px);
+  animation: result-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes result-pop {
+  0%   { transform: scale(0) rotate(-20deg); opacity: 0; }
+  100% { transform: scale(1) rotate(0deg);   opacity: 1; }
+}
+
+.result-title {
+  font-family: var(--font-display);
+  font-size: clamp(32px, 10vw, 56px);
+  font-weight: 900;
+  letter-spacing: 4px;
+  animation: result-pop 0.6s 0.1s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.result-score-wrap {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  animation: fade-up 0.5s 0.2s ease both;
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.result-score-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 32px;
+  border-radius: 8px;
+  min-width: 90px;
+}
+.player-box {
+  border: 1.5px solid var(--cyan);
+  background: rgba(0,255,255,0.06);
+  box-shadow: var(--glow-cyan);
+}
+.ai-box {
+  border: 1.5px solid var(--pink);
+  background: rgba(255,110,199,0.06);
+  box-shadow: var(--glow-pink);
+}
+
+.rsb-label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: #555;
+}
+.rsb-val {
+  font-family: var(--font-display);
+  font-size: 42px;
+  font-weight: 900;
+}
+.player-box .rsb-val { color: var(--cyan); }
+.ai-box .rsb-val     { color: var(--pink); }
+
+.result-score-sep {
+  font-size: 24px;
+  color: #333;
+}
+
+.earned-badge {
+  padding: 10px 28px;
+  border: 1px solid var(--gold);
+  border-radius: 40px;
+  color: var(--gold);
+  font-size: 16px;
+  text-shadow: var(--glow-gold);
+  background: rgba(255,215,0,0.05);
+  animation: fade-up 0.5s 0.3s ease both;
+}
+
+.total-pts-row {
+  font-size: 13px;
+  color: #555;
+  animation: fade-up 0.5s 0.35s ease both;
+}
+.total-pts-row strong { color: var(--gold); }
+
+.result-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 280px;
+  animation: fade-up 0.5s 0.4s ease both;
+}
+
+/* ═══════════════════════════════════════════════════
+   MODALLER
+   ═══════════════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.modal-overlay.open {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.modal {
+  background: #0f0f1e;
+  border: 1px solid var(--dim);
+  border-radius: 12px;
+  padding: 40px 32px;
+  width: min(400px, 90vw);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  transform: scale(0.9);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.modal-overlay.open .modal { transform: scale(1); }
+
+.modal-icon {
+  font-size: 40px;
+  color: var(--orange);
+  text-shadow: 0 0 16px var(--orange);
+}
+
+.modal-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: 4px;
+  color: var(--white);
+}
+
+.modal-body {
+  color: #888;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.modal-pts-row {
+  font-size: 18px;
+  color: var(--gold);
+  text-shadow: var(--glow-gold);
+}
+
+.modal-note {
+  font-size: 11px;
+  color: #444;
+  padding: 12px 16px;
+  border: 1px dashed #333;
+  border-radius: 6px;
+  line-height: 1.8;
+}
+.modal-note code {
+  color: var(--cyan);
+  font-family: var(--font-mono);
+}
+
+/* Stats grid (puanlar modalı) */
+.stats-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.stat-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 14px 10px;
+  text-align: center;
+}
+.stat-card-val {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+}
+.stat-card-lbl {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: #555;
+  margin-top: 4px;
+}
+
+/* ═══════════════════════════════════════════════════
+   MOBİL UYUM
+   ═══════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  .menu-content { gap: 28px; }
+  .logo-hex { font-size: 52px; }
+  .logo-title { font-size: 40px; }
+  .btn { padding: 12px 20px; font-size: 13px; }
+  .hud { padding: 8px 14px 6px; }
+}
