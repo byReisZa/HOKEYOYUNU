@@ -1,162 +1,53 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>⬡ NEON HOKEY</title>
-  <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Öğrenci Uygulaması</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- ═══════════════════════════════════════
-       EKRAN 1: ANA MENÜ
-  ═══════════════════════════════════════ -->
-  <div id="screen-menu" class="screen active">
+<header>
+    <h1>📚 Öğrenci Paneli</h1>
+</header>
 
-    <!-- Arka plan parçacıkları (JS ile doldurulur) -->
-    <div class="bg-particles" id="particles"></div>
+<nav>
+    <button onclick="showSection('yks')">YKS Sayaç</button>
+    <button onclick="showSection('deneme')">Denemeler</button>
+    <button onclick="showSection('program')">Ders Programı</button>
+    <button onclick="showSection('notlar')">Notlar</button>
+</nav>
 
-    <div class="menu-content">
-      <div class="logo-wrap">
-        <div class="logo-hex">⬡</div>
-        <h1 class="logo-title">NEON<br><span>HOKEY</span></h1>
-        <div class="logo-sub">BUZ HOKEYİ SİMÜLATÖRÜ</div>
-      </div>
+<main>
 
-      <div class="score-badge">
-        <span class="score-badge-icon">◈</span>
-        <span>Toplam Puan: <strong id="menu-total-score">0</strong></span>
-      </div>
+<section id="yks" class="active">
+    <h2>🎯 YKS Sayaç</h2>
+    <p id="countdown"></p>
+</section>
 
-      <div class="menu-buttons">
-        <button class="btn btn-primary" id="btn-start">
-          <span class="btn-glyph">▶</span> OYUNA BAŞLA
-        </button>
-        <button class="btn btn-secondary" id="btn-scores">
-          <span class="btn-glyph">◈</span> PUANLARIM
-        </button>
-        <button class="btn btn-danger" id="btn-withdraw">
-          <span class="btn-glyph">◉</span> PUAN BOZDIR
-        </button>
-      </div>
+<section id="deneme">
+    <h2>📝 Deneme Takibi</h2>
+    <input type="text" id="denemeInput" placeholder="Net gir (örn: 80)">
+    <button onclick="addDeneme()">Ekle</button>
+    <ul id="denemeList"></ul>
+</section>
 
-      <div class="menu-footer">
-        <span>⬡ İlk 7 golü atan kazanır</span>
-        <span>⬡ Her oyun +10 · Galibiyet +25</span>
-      </div>
-    </div>
-  </div>
+<section id="program">
+    <h2>📅 Ders Programı</h2>
+    <textarea id="programInput" placeholder="Ders programını yaz..."></textarea>
+    <button onclick="saveProgram()">Kaydet</button>
+</section>
 
-  <!-- ═══════════════════════════════════════
-       EKRAN 2: OYUN
-  ═══════════════════════════════════════ -->
-  <div id="screen-game" class="screen">
+<section id="notlar">
+    <h2>📊 Not Ortalaması</h2>
+    <input type="number" id="notInput" placeholder="Not gir">
+    <button onclick="addNot()">Ekle</button>
+    <p id="ortalama">Ortalama: 0</p>
+</section>
 
-    <!-- Üst HUD -->
-    <div class="hud">
-      <div class="hud-side hud-ai">
-        <div class="hud-label">AI</div>
-        <div class="hud-score" id="score-ai">0</div>
-      </div>
-      <div class="hud-center">
-        <div class="hud-vs">VS</div>
-        <div class="hud-goal-target">/ 7</div>
-      </div>
-      <div class="hud-side hud-player">
-        <div class="hud-score" id="score-player">0</div>
-        <div class="hud-label">SEN</div>
-      </div>
-    </div>
+</main>
 
-    <!-- Oyun Canvas -->
-    <canvas id="game-canvas"></canvas>
-
-    <!-- Gol bildirimi -->
-    <div class="goal-flash" id="goal-flash">
-      <div class="goal-text" id="goal-text">GOL!</div>
-    </div>
-
-    <!-- Menüye dön butonu -->
-    <button class="btn-back" id="btn-back">✕</button>
-  </div>
-
-  <!-- ═══════════════════════════════════════
-       EKRAN 3: SONUÇ
-  ═══════════════════════════════════════ -->
-  <div id="screen-result" class="screen">
-    <div class="result-content">
-
-      <div class="result-icon" id="result-icon">🏆</div>
-      <h2 class="result-title" id="result-title">KAZANDIN!</h2>
-
-      <div class="result-score-wrap">
-        <div class="result-score-box player-box">
-          <div class="rsb-label">SEN</div>
-          <div class="rsb-val" id="res-player-score">0</div>
-        </div>
-        <div class="result-score-sep">—</div>
-        <div class="result-score-box ai-box">
-          <div class="rsb-label">AI</div>
-          <div class="rsb-val" id="res-ai-score">0</div>
-        </div>
-      </div>
-
-      <div class="earned-badge" id="earned-badge">
-        <span>+<span id="earned-pts">0</span> puan kazandın!</span>
-      </div>
-
-      <div class="total-pts-row">
-        Toplam: <strong id="res-total-pts">0</strong> puan
-      </div>
-
-      <div class="result-buttons">
-        <button class="btn btn-primary" id="btn-replay">
-          <span class="btn-glyph">↺</span> TEKRAR OYNA
-        </button>
-        <button class="btn btn-ghost" id="btn-menu">
-          <span class="btn-glyph">⌂</span> ANA MENÜ
-        </button>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════
-       MODAL: PUAN BOZDIR (Placeholder)
-  ═══════════════════════════════════════ -->
-  <div class="modal-overlay" id="modal-withdraw">
-    <div class="modal">
-      <div class="modal-icon">◉</div>
-      <h3 class="modal-title">PUAN BOZDIR</h3>
-      <p class="modal-body" id="withdraw-body">
-        Bu özellik henüz aktif değil.<br>
-        Gerçek ödeme API'si yakında eklenecek!
-      </p>
-      <div class="modal-pts-row">
-        Mevcut Puan: <strong id="withdraw-pts">0</strong>
-      </div>
-      <div class="modal-note">
-        💡 <code>withdrawPoints()</code> fonksiyonu<br>
-        gerçek API entegrasyonuna hazır bekliyor.
-      </div>
-      <button class="btn btn-ghost modal-close" id="modal-close">KAPAT</button>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════
-       MODAL: PUANLARIM
-  ═══════════════════════════════════════ -->
-  <div class="modal-overlay" id="modal-scores">
-    <div class="modal">
-      <div class="modal-icon">◈</div>
-      <h3 class="modal-title">PUANLARIM</h3>
-      <div class="stats-grid" id="stats-grid">
-        <!-- JS tarafından doldurulur -->
-      </div>
-      <button class="btn btn-ghost modal-close" id="scores-close">KAPAT</button>
-    </div>
-  </div>
-
-  <script src="game.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
