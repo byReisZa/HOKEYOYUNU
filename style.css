@@ -1,257 +1,206 @@
-/* ===== BASE ===== */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --bg: #0a0a0f;
-  --panel: #12121a;
-  --border: #1e2a3a;
-  --accent: #e8a020;
-  --accent2: #ff4444;
-  --green: #00e676;
-  --blue: #29b6f6;
-  --text: #cfd8e3;
-  --dim: #546e7a;
-  --font-head: 'Orbitron', monospace;
-  --font-body: 'Rajdhani', sans-serif;
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
-html, body {
-  width: 100%; height: 100%;
-  overflow: hidden;
-  background: var(--bg);
-  font-family: var(--font-body);
-  color: var(--text);
-  user-select: none;
+body {
+    background: #0a0a0a;
+    overflow: hidden;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: white;
 }
 
-/* ===== GAME CANVAS ===== */
+.game-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+}
+
 #gameCanvas {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  display: block;
+    display: block;
+    width: 100%;
+    height: 100%;
 }
 
-/* ===== HUD TOP BAR ===== */
-#hud {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  height: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 32px;
-  background: linear-gradient(180deg, rgba(10,10,15,0.98) 0%, rgba(10,10,15,0.6) 100%);
-  border-bottom: 1px solid var(--border);
-  z-index: 100;
-  backdrop-filter: blur(6px);
+.hud {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: flex-end;
+    gap: 30px;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 20px 40px;
+    border-radius: 20px;
+    border: 2px solid #333;
+    backdrop-filter: blur(10px);
 }
 
-#hud-left, #hud-right {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-width: 120px;
+.speedometer {
+    position: relative;
+    width: 150px;
+    height: 150px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
-#hud-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
+.gauge-bg {
+    position: absolute;
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    border: 8px solid #333;
+    border-top-color: #ff3333;
+    border-right-color: #ffaa00;
+    transform: rotate(-45deg);
 }
 
-.hud-label {
-  font-family: var(--font-head);
-  font-size: 9px;
-  letter-spacing: 3px;
-  color: var(--dim);
-  text-transform: uppercase;
+.gauge-needle {
+    position: absolute;
+    width: 4px;
+    height: 60px;
+    background: #ff3333;
+    bottom: 50%;
+    left: 50%;
+    transform-origin: bottom center;
+    transform: translateX(-50%) rotate(-135deg);
+    border-radius: 2px;
+    transition: transform 0.1s ease-out;
+    z-index: 10;
 }
 
-.hud-unit {
-  font-family: var(--font-body);
-  font-size: 11px;
-  color: var(--dim);
-  letter-spacing: 2px;
+.gauge-needle::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: #ff3333;
+    border-radius: 50%;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
 }
 
-#speed-display {
-  font-family: var(--font-head);
-  font-size: 38px;
-  font-weight: 900;
-  color: var(--accent);
-  line-height: 1;
-  letter-spacing: 2px;
-  text-shadow: 0 0 20px rgba(232, 160, 32, 0.5);
-  transition: color 0.1s;
+.speed-value {
+    font-size: 36px;
+    font-weight: bold;
+    color: #fff;
+    z-index: 5;
+    margin-top: 20px;
 }
 
-#rpm-display {
-  font-family: var(--font-head);
-  font-size: 38px;
-  font-weight: 900;
-  color: var(--blue);
-  line-height: 1;
-  letter-spacing: 2px;
-  text-shadow: 0 0 20px rgba(41, 182, 246, 0.5);
+.speed-unit {
+    font-size: 12px;
+    color: #aaa;
+    z-index: 5;
 }
 
-#gear-display {
-  font-family: var(--font-head);
-  font-size: 42px;
-  font-weight: 900;
-  color: var(--green);
-  line-height: 1;
-  text-shadow: 0 0 24px rgba(0, 230, 118, 0.6);
-  transition: all 0.15s;
-  min-width: 40px;
-  text-align: center;
+.gear-display {
+    text-align: center;
+    padding: 10px 20px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    border: 2px solid #444;
 }
 
-#gear-bar {
-  display: flex;
-  gap: 6px;
+.gear-label {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 5px;
 }
 
-.g-btn {
-  font-family: var(--font-head);
-  font-size: 11px;
-  font-weight: 700;
-  width: 26px; height: 26px;
-  display: flex; align-items: center; justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: rgba(255,255,255,0.03);
-  color: var(--dim);
-  transition: all 0.15s;
-  cursor: default;
+.gear-value {
+    font-size: 48px;
+    font-weight: bold;
+    color: #00ff88;
+    text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+    min-width: 50px;
 }
 
-.g-btn.active {
-  background: rgba(0, 230, 118, 0.15);
-  border-color: var(--green);
-  color: var(--green);
-  box-shadow: 0 0 10px rgba(0,230,118,0.3);
+.rpm-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
 }
 
-/* ===== GAUGES ===== */
-#rpm-gauge-wrap {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 100;
-  filter: drop-shadow(0 0 20px rgba(41,182,246,0.3));
+.rpm-bar-container {
+    width: 30px;
+    height: 120px;
+    background: #222;
+    border-radius: 15px;
+    overflow: hidden;
+    border: 2px solid #444;
+    position: relative;
 }
 
-#speed-gauge-wrap {
-  position: fixed;
-  bottom: 24px;
-  right: 200px;
-  z-index: 100;
-  filter: drop-shadow(0 0 20px rgba(232,160,32,0.3));
+.rpm-bar {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    height: 0%;
+    background: linear-gradient(to top, #00ff88, #ffff00, #ff3333);
+    transition: height 0.1s ease-out;
+    border-radius: 0 0 13px 13px;
 }
 
-/* ===== CONTROLS HINT ===== */
-#controls-hint {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 16px;
-  z-index: 100;
-  background: rgba(10,10,15,0.85);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 20px;
-  backdrop-filter: blur(8px);
+.rpm-label {
+    font-size: 11px;
+    color: #888;
 }
 
-#controls-hint span {
-  font-family: var(--font-body);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 1px;
-  color: var(--dim);
-  white-space: nowrap;
+.controls-hint {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 20px;
+    font-size: 12px;
+    color: #ccc;
 }
 
-/* ===== DISTANCE ===== */
-#distance-wrap {
-  position: fixed;
-  top: 92px;
-  left: 24px;
-  z-index: 100;
-  background: rgba(10,10,15,0.85);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 16px;
-  text-align: center;
-  backdrop-filter: blur(6px);
+.hint-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-#distance-display {
-  font-family: var(--font-head);
-  font-size: 16px;
-  color: var(--accent);
-  margin-top: 2px;
+.key {
+    display: inline-block;
+    background: #333;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: bold;
+    color: #fff;
+    min-width: 30px;
+    text-align: center;
 }
 
-/* ===== ENGINE BAR ===== */
-#engine-bar-wrap {
-  position: fixed;
-  top: 92px;
-  right: 24px;
-  z-index: 100;
-  background: rgba(10,10,15,0.85);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 16px;
-  text-align: center;
-  backdrop-filter: blur(6px);
-  min-width: 120px;
-}
+@media (max-width: 768px) {
+    .hud {
+        flex-direction: column;
+        align-items: center;
+        padding: 15px;
+        gap: 15px;
+        bottom: 10px;
+    }
 
-#engine-bar-bg {
-  width: 100%;
-  height: 8px;
-  background: rgba(255,255,255,0.05);
-  border-radius: 4px;
-  overflow: hidden;
-  margin-top: 4px;
-}
+    .controls-hint {
+        grid-template-columns: 1fr 1fr 1fr;
+        font-size: 10px;
+    }
 
-#engine-bar-fill {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, var(--green), var(--accent), var(--accent2));
-  border-radius: 4px;
-  transition: width 0.05s, background 0.1s;
-}
+    .speedometer {
+        width: 120px;
+        height: 120px;
+    }
 
-/* ===== REDLINE FLASH ===== */
-body.redline #rpm-display {
-  color: var(--accent2);
-  text-shadow: 0 0 30px rgba(255,68,68,0.9);
-  animation: flash 0.15s infinite alternate;
-}
-
-@keyframes flash {
-  from { opacity: 1; }
-  to   { opacity: 0.5; }
-}
-
-/* ===== SPEED OVERDRIVE ===== */
-body.overdrive #speed-display {
-  color: var(--accent2);
-  text-shadow: 0 0 30px rgba(255,68,68,0.7);
-}
-
-/* ===== RESPONSIVE ===== */
-@media (max-width: 600px) {
-  #controls-hint { display: none; }
-  #hud { padding: 0 12px; }
-  #speed-display, #rpm-display { font-size: 26px; }
-  #gear-display { font-size: 30px; }
+    .gauge-bg {
+        width: 120px;
+        height: 120px;
+    }
 }
