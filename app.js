@@ -125,6 +125,12 @@ let ball   = { x: 0, y: 0, vx: 0, vy: 0, r: BALL_R };
 let goalFlash = null; // { who, timer }
 let particles = [];
 
+// ─── HIZLANMA AYARLARI ──────────────────────────────────────────────────────
+const SPEED_INCREMENT = 0.08;      // Her vuruşta %8 hızlanma
+const MAX_SPEED_MULTIPLIER = 2.5;  // Maksimum başlangıç hızının 2.5 katı
+let currentSpeedMultiplier = 1.0;  // Başlangıçta normal hız
+let rallyCount = 0;                // Vuruş sayacı
+
 function resizeCanvas() {
   const bar = document.querySelector('.score-bar');
   const hint = document.getElementById('ctrl-hint');
@@ -141,10 +147,15 @@ function resizeCanvas() {
 function resetBall(towardPlayer = true) {
   ball.x = W / 2;
   ball.y = H / 2;
-  const speed = Math.min(W, H) * 0.012;
+  
+  // Hızlanmayı sıfırla
+  currentSpeedMultiplier = 1.0;
+  rallyCount = 0;
+  
+  const baseSpeed = Math.min(W, H) * 0.012;
   const angle = (Math.random() * 60 - 30) * (Math.PI / 180);
-  ball.vx = speed * Math.sin(angle) * (Math.random() > 0.5 ? 1 : -1);
-  ball.vy = speed * (towardPlayer ? 1 : -1);
+  ball.vx = baseSpeed * Math.sin(angle) * (Math.random() > 0.5 ? 1 : -1);
+  ball.vy = baseSpeed * (towardPlayer ? 1 : -1);
 }
 
 function resetPositions() {
@@ -231,7 +242,6 @@ function spawnParticles(x, y, color, count = 18) {
   }
 }
 
-// YENİ
 function updateParticles() {
   particles = particles.filter(p => p.life > 0.03);
   particles.forEach(p => {
@@ -240,6 +250,36 @@ function updateParticles() {
     p.life -= 0.03;
     p.vx *= 0.97;
   });
+}
+
+// ─── HIZLANMA GÖSTERGESİ ────────────────────────────────────────────────────
+function drawSpeedIndicator() {
+  const barWidth = 120;
+  const barHeight = 6;
+  const barX = W / 2 - barWidth / 2;
+  const barY = 10;
+  
+  // Arka plan
+  ctx.fillStyle = 'rgba(255,255,255,0.1)';
+  ctx.fillRect(barX, barY, barWidth, barHeight);
+  
+  // Doluluk
+  const fillRatio = (currentSpeedMultiplier - 1) / (MAX_SPEED_MULTIPLIER - 1);
+  const fillWidth = barWidth * Math.min(fillRatio, 1);
+  
+  // Renk geçişi: mavi → mor → pembe
+  const hue = 180 + fillRatio * 140; // 180 (cyan) → 320 (pink)
+  ctx.fillStyle = `hsl(${hue}, 100%, 60%)`;
+  ctx.shadowColor = `hsl(${hue}, 100%, 60%)`;
+  ctx.shadowBlur = 8;
+  ctx.fillRect(barX, barY, fillWidth, barHeight);
+  ctx.shadowBlur = 0;
+  
+  // Hız yüzdesi yazısı
+  ctx.fillStyle = `hsl(${hue}, 100%, 70%)`;
+  ctx.font = 'bold 10px Segoe UI';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${Math.round(currentSpeedMultiplier * 100)}% HIZ`, W / 2, barY + 16);
 }
 
 // ─── PHYSICS ──────────────────────────────────────────────────────────────────
@@ -266,12 +306,28 @@ function updatePhysics() {
     ) {
       const hitPos = (ball.x - (paddle.x + paddle.w / 2)) / (paddle.w / 2); // -1 to 1
       const angle = hitPos * 65 * (Math.PI / 180);
-      const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy) * 1.04;
-      const maxSpeed = Math.min(W, H) * 0.022;
-      const s = Math.min(speed, maxSpeed);
+      
+      // HIZLANMA: Her vuruşta hız çarpanını artır
+      rallyCount++;
+      currentSpeedMultiplier = Math.min(
+        1 + (rallyCount * SPEED_INCREMENT),
+        MAX_SPEED_MULTIPLIER
+      );
+      
+      // Mevcut hızı çarpanla çarp
+      const baseSpeed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+      const newSpeed = baseSpeed * (1 + SPEED_INCREMENT);
+      const maxSpeed = Math.min(W, H) * 0.022 * currentSpeedMultiplier;
+      const s = Math.min(newSpeed, maxSpeed);
+      
       ball.vx = s * Math.sin(angle);
       ball.vy = (paddle === player) ? -Math.abs(s * Math.cos(angle)) : Math.abs(s * Math.cos(angle));
-      spawnParticles(ball.x, ball.y, '#ff00aa', 14);
+      
+      // Hızlanma efekti: daha fazla ve daha hızlı parçacık
+      const particleCount = Math.min(14 + rallyCount * 2, 30);
+      const particleColor = currentSpeedMultiplier > 1.5 ? '#ff00aa' : '#00f5ff';
+      spawnParticles(ball.x, ball.y, particleColor, particleCount);
+      
       return true;
     }
     return false;
@@ -382,12 +438,20 @@ function drawPaddle(p, color) {
 
 function drawBall() {
   ctx.save();
-  ctx.shadowColor = '#00f5ff';
-  ctx.shadowBlur = 24;
+  
+  // Hıza göre top rengi ve glow değişimi
+  const speedRatio = (currentSpeedMultiplier - 1) / (MAX_SPEED_MULTIPLIER - 1);
+  const hue = 180 + speedRatio * 140; // cyan → pink
+  const glowColor = `hsl(${hue}, 100%, 60%)`;
+  const ballColor = `hsl(${hue}, 100%, 50%)`;
+  
+  ctx.shadowColor = glowColor;
+  ctx.shadowBlur = 24 + speedRatio * 16; // Hızlandıkça daha fazla glow
+  
   const grad = ctx.createRadialGradient(ball.x - 3, ball.y - 3, 1, ball.x, ball.y, ball.r);
   grad.addColorStop(0, '#ffffff');
-  grad.addColorStop(0.4, '#00f5ff');
-  grad.addColorStop(1, '#0040ff');
+  grad.addColorStop(0.4, glowColor);
+  grad.addColorStop(1, ballColor);
   ctx.fillStyle = grad;
   ctx.beginPath();
   ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
@@ -395,7 +459,6 @@ function drawBall() {
   ctx.restore();
 }
 
-// YENİ
 function drawParticles() {
   particles.forEach(p => {
     const r = p.r * p.life;
@@ -432,6 +495,7 @@ function loop() {
   drawPaddle(player, '#00f5ff');
   drawBall();
   drawParticles();
+  drawSpeedIndicator(); // Hız göstergesini çiz
 
   // Goal flash overlay
   if (goalFlash) {
