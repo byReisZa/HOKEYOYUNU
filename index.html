@@ -2,75 +2,23 @@
 <!doctype html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Neon Sürüş - 3D</title>
-  <meta name="description" content="GitHub Pages uyumlu hafif 3D sürüş oyunu.">
-  <link rel="stylesheet" href="./style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neon Sürüş</title>
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <div id="oyun-kabugu">
-    <canvas id="minimap" width="220" height="220" aria-label="Minimap"></canvas>
+  <div id="ui">
+    <div class="card">Hız: <span id="speed">0</span> km/sa</div>
+    <div class="card">Vites: <span id="gear">N</span></div>
+    <div class="card">FPS: <span id="fps">0</span></div>
+    <button id="camBtn">Kamera (C)</button>
+  </div>
 
-    <div id="hud">
-      <div class="panel">
-        <div class="label">Hız</div>
-        <div id="speed">0 <span>km/sa</span></div>
-      </div>
-      <div class="panel">
-        <div class="label">Devir</div>
-        <div id="rpm">900 <span>RPM</span></div>
-      </div>
-      <div class="panel">
-        <div class="label">Vites</div>
-        <div id="gear">N</div>
-      </div>
-      <div class="panel">
-        <div class="label">FPS</div>
-        <div id="fps">0</div>
-      </div>
-    </div>
-
-    <div id="crosshair"></div>
-
-    <div id="menu-butonlar">
-      <button id="kamera-btn">Kamera (C)</button>
-      <button id="duraklat-btn">Duraklat (P)</button>
-    </div>
-
-    <div id="overlay-baslangic" class="overlay acik">
-      <div class="kart">
-        <h1>Neon Sürüş</h1>
-        <p>Klavye: <b>W</b> gaz, <b>S</b> fren/geri, <b>A/D</b> direksiyon, <b>Space</b> el freni, <b>Shift</b> nitro, <b>C</b> kamera.</p>
-        <p>Mobilde alttaki dokunmatik kontroller aktiftir.</p>
-        <button id="baslat-btn">Motoru Çalıştır</button>
-      </div>
-    </div>
-
-    <div id="overlay-pause" class="overlay">
-      <div class="kart">
-        <h2>Duraklatıldı</h2>
-        <div class="ayar">
-          <label for="kalite">Grafik Kalitesi</label>
-          <input id="kalite" type="range" min="0.6" max="1.4" step="0.1" value="1">
-        </div>
-        <div class="ayar">
-          <label for="gece">Gece Yoğunluğu</label>
-          <input id="gece" type="range" min="0" max="1" step="0.05" value="0.35">
-        </div>
-        <button id="devam-btn">Devam Et</button>
-      </div>
-    </div>
-
-    <div id="mobil-kontrol" aria-hidden="true">
-      <button data-key="KeyW">Gaz</button>
-      <button data-key="Space">El Freni</button>
-      <button data-key="ShiftLeft">Nitro</button>
-      <button data-key="KeyA">Sol</button>
-      <button data-key="KeyS">Fren</button>
-      <button data-key="KeyD">Sağ</button>
-      <button data-key="KeyC">Kamera</button>
-    </div>
+  <div id="start">
+    <h1>Neon Sürüş</h1>
+    <p>W/S: Gaz-Fren, A/D: Direksiyon, Shift: Nitro, C: Kamera</p>
+    <button id="startBtn">Başlat</button>
   </div>
 
   <script type="module" src="./main.js"></script>
