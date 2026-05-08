@@ -2,68 +2,73 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#0a0a1a" />
-  <title>Neon Hockey</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Araba Simülatörü</title>
   <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet" />
 </head>
 <body>
 
-  <!-- ANA MENÜ -->
-  <div id="screen-menu" class="screen active">
-    <div class="menu-glow"></div>
-    <h1 class="logo">⬡ NEON<br><span>HOCKEY</span></h1>
-    <div class="stats-box">
-      <div class="stat"><span class="stat-label">Tecrübe</span><span id="menu-xp">0</span></div>
-      <div class="stat"><span class="stat-label">TL Bakiye</span><span id="menu-tl">0.00 ₺</span></div>
+  <!-- HUD -->
+  <div id="hud">
+    <div id="hud-left">
+      <div class="hud-label">HIZ</div>
+      <div id="speed-display">0</div>
+      <div class="hud-unit">km/h</div>
     </div>
-    <button class="btn-neon" id="btn-play">OYNA</button>
-    <button class="btn-neon secondary" id="btn-convert">TECRÜBEYİ DÖNÜŞTÜR</button>
-    <div class="convert-info">1 Tecrübe = 0.10 ₺</div>
-  </div>
-
-  <!-- DÖNÜŞTÜRME EKRANI -->
-  <div id="screen-convert" class="screen">
-    <h2 class="section-title">Dönüştür</h2>
-    <div class="convert-box">
-      <div class="convert-row"><span>Mevcut Tecrübe:</span><span id="conv-xp">0</span></div>
-      <div class="convert-row"><span>Dönüşüm Değeri:</span><span id="conv-val">0.00 ₺</span></div>
-      <input type="number" id="conv-input" placeholder="Dönüştürülecek miktar" min="1" />
-      <button class="btn-neon" id="btn-do-convert">DÖNÜŞTÜR</button>
-      <div id="conv-msg" class="conv-msg"></div>
-    </div>
-    <button class="btn-back" id="btn-back-convert">← GERİ</button>
-  </div>
-
-  <!-- OYUN EKRANI -->
-  <div id="screen-game" class="screen">
-    <div class="score-bar">
-      <div class="score-side">
-        <span class="score-name">SEN</span>
-        <span class="score-num" id="score-player">0</span>
-      </div>
-      <div class="score-mid"><span id="match-info">İlk 3 Gol Kazanır</span></div>
-      <div class="score-side right">
-        <span class="score-num" id="score-bot">0</span>
-        <span class="score-name">BOT</span>
+    <div id="hud-center">
+      <div class="hud-label">VİTES</div>
+      <div id="gear-display">N</div>
+      <div id="gear-bar">
+        <span class="g-btn" data-g="0">N</span>
+        <span class="g-btn" data-g="1">1</span>
+        <span class="g-btn" data-g="2">2</span>
+        <span class="g-btn" data-g="3">3</span>
+        <span class="g-btn" data-g="4">4</span>
+        <span class="g-btn" data-g="5">5</span>
       </div>
     </div>
-    <canvas id="gameCanvas"></canvas>
-    <div class="controls-hint" id="ctrl-hint">Paddinini hareket ettirmek için sürükle</div>
+    <div id="hud-right">
+      <div class="hud-label">RPM</div>
+      <div id="rpm-display">0</div>
+      <div class="hud-unit">×100</div>
+    </div>
   </div>
 
-  <!-- SONUÇ EKRANI -->
-  <div id="screen-result" class="screen">
-    <div class="result-glow" id="result-glow"></div>
-    <h2 id="result-title">KAZANDIN!</h2>
-    <div class="result-xp" id="result-xp-msg">+1 Tecrübe Kazandın 🏆</div>
-    <div class="result-scores">
-      <div class="rs"><span>Sen</span><span id="rs-player">0</span></div>
-      <div class="rs sep">—</div>
-      <div class="rs"><span id="rs-bot">0</span><span>Bot</span></div>
+  <!-- RPM Göstergesi -->
+  <div id="rpm-gauge-wrap">
+    <canvas id="rpm-gauge" width="160" height="160"></canvas>
+  </div>
+
+  <!-- Hız Göstergesi -->
+  <div id="speed-gauge-wrap">
+    <canvas id="speed-gauge" width="160" height="160"></canvas>
+  </div>
+
+  <!-- Oyun Canvas -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Kontroller -->
+  <div id="controls-hint">
+    <span>↑ Gaz</span>
+    <span>↓ Fren</span>
+    <span>← → Direksiyon</span>
+    <span>W/S Vites</span>
+    <span>SPACE El Freni</span>
+  </div>
+
+  <!-- Mesafe -->
+  <div id="distance-wrap">
+    <div class="hud-label">MESAFE</div>
+    <div id="distance-display">0 m</div>
+  </div>
+
+  <!-- Motor Sesi Göstergesi -->
+  <div id="engine-bar-wrap">
+    <div class="hud-label">MOTOR</div>
+    <div id="engine-bar-bg">
+      <div id="engine-bar-fill"></div>
     </div>
-    <button class="btn-neon" id="btn-rematch">TEKRAR OYNA</button>
-    <button class="btn-neon secondary" id="btn-menu">ANA MENÜ</button>
   </div>
 
   <script src="app.js"></script>
