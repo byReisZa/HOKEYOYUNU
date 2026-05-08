@@ -1,24 +1,85 @@
-<!-- index.html -->
 <!doctype html>
 <html lang="tr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Neon Sürüş</title>
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <div id="ui">
+  <!-- Cihaz Seçimi -->
+  <div id="device-select">
+    <h1>Neon Sürüş</h1>
+    <p>Oynama şeklini seç</p>
+    <div class="device-btns">
+      <button id="btn-pc">💻 PC (Klavye)</button>
+      <button id="btn-mobile">📱 Mobil (Dokunmatik)</button>
+    </div>
+  </div>
+
+  <!-- Başlangıç Ekranı -->
+  <div id="start" class="hidden">
+    <h1>Neon Sürüş</h1>
+    <p id="controls-hint">W/S: Gaz-Fren, A/D: Direksiyon, Q/E: Vites, Shift: Nitro, C: Kamera</p>
+    <button id="startBtn">Başlat</button>
+  </div>
+
+  <!-- UI -->
+  <div id="ui" class="hidden">
     <div class="card">Hız: <span id="speed">0</span> km/sa</div>
     <div class="card">Vites: <span id="gear">N</span></div>
+    <div class="card">RPM: <span id="rpm">0</span></div>
     <div class="card">FPS: <span id="fps">0</span></div>
     <button id="camBtn">Kamera (C)</button>
   </div>
 
-  <div id="start">
-    <h1>Neon Sürüş</h1>
-    <p>W/S: Gaz-Fren, A/D: Direksiyon, Shift: Nitro, C: Kamera</p>
-    <button id="startBtn">Başlat</button>
+  <!-- İç Kamera Gösterge Paneli -->
+  <div id="dashboard" class="hidden">
+    <div class="dash-gauge">
+      <div class="gauge-needle" id="rpm-needle"></div>
+      <div class="gauge-label">RPM</div>
+      <div class="gauge-value" id="dash-rpm">0</div>
+    </div>
+    <div class="dash-center">
+      <div class="dash-gear" id="dash-gear">N</div>
+      <div class="dash-kmh" id="dash-kmh">0</div>
+      <div class="dash-unit">km/sa</div>
+    </div>
+    <div class="dash-gauge">
+      <div class="gauge-needle" id="speed-needle"></div>
+      <div class="gauge-label">HIZ</div>
+      <div class="gauge-value" id="dash-speed">0</div>
+    </div>
+  </div>
+
+  <!-- Mobil Kontroller -->
+  <div id="mobile-controls" class="hidden">
+    <div class="mob-left">
+      <button id="btn-left" class="mob-btn">◀</button>
+      <button id="btn-right" class="mob-btn">▶</button>
+    </div>
+    <div class="mob-center">
+      <button id="btn-brake" class="mob-btn mob-brake">FREN</button>
+    </div>
+    <div class="mob-right">
+      <button id="btn-gas" class="mob-btn mob-gas">GAZ</button>
+      <button id="btn-nitro" class="mob-btn mob-nitro">NITRO</button>
+    </div>
+  </div>
+
+  <!-- Mobil Vites Kutusu (H-Pattern) -->
+  <div id="gear-shifter" class="hidden">
+    <div class="shifter-title">VİTES</div>
+    <div class="gear-grid">
+      <div class="gear-slot" style="grid-area:r" data-gear="R">R</div>
+      <div class="gear-slot" style="grid-area:n1" data-gear="1">1</div>
+      <div class="gear-slot" style="grid-area:n2" data-gear="2">2</div>
+      <div class="gear-slot" style="grid-area:n3" data-gear="3">3</div>
+      <div class="gear-slot" style="grid-area:n4" data-gear="4">4</div>
+      <div class="gear-slot" style="grid-area:n5" data-gear="5">5</div>
+      <div class="gear-slot" style="grid-area:n6" data-gear="6">6</div>
+    </div>
+    <div id="gear-knob"></div>
   </div>
 
   <script type="module" src="./main.js"></script>
