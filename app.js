@@ -231,8 +231,9 @@ function spawnParticles(x, y, color, count = 18) {
   }
 }
 
+// YENİ
 function updateParticles() {
-  particles = particles.filter(p => p.life > 0);
+  particles = particles.filter(p => p.life > 0.03);
   particles.forEach(p => {
     p.x += p.vx; p.y += p.vy;
     p.vy += 0.1;
@@ -394,15 +395,18 @@ function drawBall() {
   ctx.restore();
 }
 
+// YENİ
 function drawParticles() {
   particles.forEach(p => {
+    const r = p.r * p.life;
+    if (r <= 0) return;
     ctx.save();
-    ctx.globalAlpha = p.life;
+    ctx.globalAlpha = Math.max(0, p.life);
     ctx.shadowColor = p.color;
     ctx.shadowBlur = 10;
     ctx.fillStyle = p.color;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   });
