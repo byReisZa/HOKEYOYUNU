@@ -86,7 +86,7 @@ button { color: #eaf6ff; cursor: pointer; }
   background: #ff3d5a; border-radius: 2px;
   transform-origin: bottom center;
   transform: rotate(-135deg);
-  transition: transform 0.1s linear;
+  /* 🚀 CSS transition kaldırıldı - JS ile direkt güncelleme daha hızlı */
   box-shadow: 0 0 6px rgba(255,61,90,0.6);
 }
 .gauge-label { font-size: 10px; opacity: .7; margin-top: 18px; text-align: center; }
@@ -177,7 +177,7 @@ button { color: #eaf6ff; cursor: pointer; }
   border-radius: 50%; border: 2px solid rgba(255,255,255,.35);
   box-shadow: 0 3px 10px rgba(0,0,0,0.5), inset 0 0 8px rgba(255,255,255,.1);
   pointer-events: none;
-  transition: transform 0.18s cubic-bezier(.25,.8,.25,1);
+  /* 🚀 CSS transition kaldırıldı - JS ile direkt güncelleme */
   z-index: 2;
 }
 
