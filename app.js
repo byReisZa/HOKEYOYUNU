@@ -1,584 +1,678 @@
-// =============================================
-//  ARABA SİMÜLATÖRÜ — app.js
-// =============================================
+// Araba Simülatörü - app.js
 
-const canvas  = document.getElementById('gameCanvas');
-const ctx     = canvas.getContext('2d');
-const rpmCvs  = document.getElementById('rpm-gauge');
-const spdCvs  = document.getElementById('speed-gauge');
-const rpmCtx  = rpmCvs.getContext('2d');
-const spdCtx  = spdCvs.getContext('2d');
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-// ── Boyutlandırma ──────────────────────────────
+// Ekran boyutları
+let width, height;
 function resize() {
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
+    width = canvas.width = window.innerWidth;
+    height = canvas.height = window.innerHeight;
 }
 window.addEventListener('resize', resize);
 resize();
 
-// ── Yol Eğrisi Tanımları (uzun, kıvrımlı) ─────
-// Her segment: { angle: radyan/adım, length: adım sayısı }
-const ROAD_SEGMENTS = [];
-(function buildRoad() {
-  const pattern = [
-    { angle: 0,       length: 200 },
-    { angle: 0.012,   length: 120 },
-    { angle: 0,       length: 80  },
-    { angle: -0.018,  length: 150 },
-    { angle: 0,       length: 100 },
-    { angle: 0.022,   length: 100 },
-    { angle: -0.010,  length: 80  },
-    { angle: 0,       length: 200 },
-    { angle: -0.025,  length: 130 },
-    { angle: 0.015,   length: 110 },
-    { angle: 0,       length: 90  },
-    { angle: 0.030,   length: 80  },
-    { angle: 0,       length: 120 },
-    { angle: -0.020,  length: 140 },
-    { angle: 0,       length: 160 },
-  ];
-  for (let loop = 0; loop < 40; loop++) {
-    for (const p of pattern) {
-      ROAD_SEGMENTS.push({ ...p });
-    }
-  }
-})();
-
-// Yol şeridi koordinatları önceden hesapla
-const ROAD_WIDTH   = 320;
-const STEP         = 2; // piksel/adım (dünya birimi)
-let roadPoints     = [];  // { x, y, angle } dünya koordinatları
-
-(function buildPoints() {
-  let x = 0, y = 0, angle = -Math.PI / 2;
-  let si = 0, stepInSeg = 0;
-  const totalSteps = ROAD_SEGMENTS.reduce((a, s) => a + s.length, 0);
-
-  for (let i = 0; i < totalSteps; i++) {
-    roadPoints.push({ x, y, angle });
-    const seg = ROAD_SEGMENTS[si];
-    angle += seg.angle;
-    x += Math.cos(angle) * STEP;
-    y += Math.sin(angle) * STEP;
-    stepInSeg++;
-    if (stepInSeg >= seg.length) { stepInSeg = 0; si = (si + 1) % ROAD_SEGMENTS.length; }
-  }
-})();
-
-// ── Araba Durumu ────────────────────────────────
-const CAR = {
-  roadPos: 0,          // Yol üzerindeki konum (roadPoints index, float)
-  lateralOffset: 0,    // Şeritten yatay sapma
-  speed: 0,            // m/s dünya birimi
-  gear: 0,             // 0=Nötr, 1-5
-  rpm: 800,
-  steer: 0,
-  braking: false,
-  handbrake: false,
-  engineOn: true,
+// Oyun durumu
+const game = {
+    car: {
+        x: 0,
+        y: 0,
+        angle: 0,
+        speed: 0,
+        maxSpeed: 280,
+        acceleration: 0,
+        steering: 0,
+        gear: 0, // 0: N, 1-5: vitesler, -1: R
+        rpm: 0,
+        maxRpm: 8000,
+        wheelAngle: 0,
+        drift: 0
+    },
+    camera: {
+        x: 0,
+        y: 0
+    },
+    road: {
+        points: [],
+        width: 120,
+        totalLength: 20000,
+        segmentLength: 50
+    },
+    keys: {},
+    particles: [],
+    skidMarks: [],
+    time: 0
 };
 
-const GEAR_RATIOS   = [0, 3.2, 1.9, 1.3, 0.95, 0.75]; // 0=nötr
-const MAX_RPM       = 7000;
-const IDLE_RPM      = 800;
-const SHIFT_RPM_UP  = 6200;
-const SHIFT_RPM_DN  = 2200;
-const MAX_SPEED_KMH = 220;
-const MAX_SPEED     = MAX_SPEED_KMH / 3.6;
+// Yol noktalarını oluştur (kıvrımlı virajlar)
+function generateRoad() {
+    game.road.points = [];
+    const segments = game.road.totalLength / game.road.segmentLength;
 
-// Vites başına max hız (km/h)
-const GEAR_MAX_SPD  = [0, 50, 90, 130, 170, MAX_SPEED_KMH];
+    for (let i = 0; i <= segments; i++) {
+        const t = i / segments;
+        const distance = i * game.road.segmentLength;
 
-// ── Klavye ─────────────────────────────────────
-const keys = {};
-window.addEventListener('keydown', e => {
-  keys[e.code] = true;
-  if (e.code === 'KeyW') shiftUp();
-  if (e.code === 'KeyS') shiftDown();
-  if (e.code === 'Space') e.preventDefault();
+        // Kıvrımlı yol formülü - sinüs dalgaları ile virajlar
+        const baseCurve = Math.sin(t * Math.PI * 8) * 300;
+        const sharpCurve = Math.sin(t * Math.PI * 3) * 150;
+        const microCurve = Math.sin(t * Math.PI * 20) * 50;
+
+        const x = baseCurve + sharpCurve + microCurve;
+        const y = distance;
+
+        game.road.points.push({ x, y });
+    }
+}
+
+generateRoad();
+
+// Yol eğimini hesapla
+function getRoadCurve(index) {
+    if (index < 0 || index >= game.road.points.length - 1) return 0;
+    const p1 = game.road.points[index];
+    const p2 = game.road.points[index + 1];
+    return Math.atan2(p2.x - p1.x, p2.y - p1.y);
+}
+
+// Arabanın yoldaki pozisyonunu bul
+function getCarRoadIndex() {
+    const carY = game.car.y;
+    return Math.floor(carY / game.road.segmentLength);
+}
+
+// Yol kenarını hesapla
+function getRoadEdge(y, side) {
+    const index = Math.floor(y / game.road.segmentLength);
+    if (index < 0 || index >= game.road.points.length) return { x: side * game.road.width, y };
+
+    const point = game.road.points[index];
+    const nextPoint = game.road.points[Math.min(index + 1, game.road.points.length - 1)];
+    const angle = Math.atan2(nextPoint.x - point.x, nextPoint.y - point.y);
+
+    const perpX = Math.sin(angle) * side * (game.road.width / 2);
+    const perpY = Math.cos(angle) * side * (game.road.width / 2);
+
+    const frac = (y % game.road.segmentLength) / game.road.segmentLength;
+    const interpX = point.x + (nextPoint.x - point.x) * frac;
+
+    return {
+        x: interpX + perpX,
+        y: y + perpY
+    };
+}
+
+// Yol merkezini hesapla
+function getRoadCenter(y) {
+    const index = Math.floor(y / game.road.segmentLength);
+    if (index < 0 || index >= game.road.points.length) return { x: 0, y };
+
+    const point = game.road.points[index];
+    const nextPoint = game.road.points[Math.min(index + 1, game.road.points.length - 1)];
+    const frac = (y % game.road.segmentLength) / game.road.segmentLength;
+
+    return {
+        x: point.x + (nextPoint.x - point.x) * frac,
+        y: y
+    };
+}
+
+// Klavye kontrolleri
+window.addEventListener('keydown', (e) => {
+    game.keys[e.code] = true;
+
+    // Vites değiştirme
+    if (e.code === 'KeyQ') {
+        if (game.car.gear < 5) game.car.gear++;
+    }
+    if (e.code === 'KeyE') {
+        if (game.car.gear > -1) game.car.gear--;
+    }
 });
-window.addEventListener('keyup',   e => { keys[e.code] = false; });
 
-function shiftUp()   { if (CAR.gear < 5) { CAR.gear++; updateGearUI(); } }
-function shiftDown() { if (CAR.gear > 0) { CAR.gear--; updateGearUI(); } }
+window.addEventListener('keyup', (e) => {
+    game.keys[e.code] = false;
+});
 
-// ── Fizik ───────────────────────────────────────
-let lastTime = 0;
-let totalDist = 0;
+// Vites oranları
+const gearRatios = {
+    '-1': -3.5,  // R
+    '0': 0,      // N
+    '1': 3.5,
+    '2': 2.1,
+    '3': 1.4,
+    '4': 1.0,
+    '5': 0.75
+};
 
-function update(ts) {
-  const dt = Math.min((ts - lastTime) / 1000, 0.05);
-  lastTime = ts;
+// Fizik güncelleme
+function updatePhysics(dt) {
+    const car = game.car;
 
-  const gas   = keys['ArrowUp']   ? 1 : 0;
-  const brake = keys['ArrowDown'] ? 1 : 0;
-  const left  = keys['ArrowLeft'] ? 1 : 0;
-  const right = keys['ArrowRight']? 1 : 0;
-  const hbk   = keys['Space']     ? 1 : 0;
+    // Gaz ve fren
+    let throttle = 0;
+    let brake = 0;
 
-  CAR.braking   = brake > 0;
-  CAR.handbrake = hbk  > 0;
+    if (game.keys['KeyW'] || game.keys['ArrowUp']) throttle = 1;
+    if (game.keys['KeyS'] || game.keys['ArrowDown']) brake = 1;
 
-  // Hız (km/h)
-  const spdKmh = CAR.speed * 3.6;
+    // Direksiyon
+    let steerInput = 0;
+    if (game.keys['KeyA'] || game.keys['ArrowLeft']) steerInput = -1;
+    if (game.keys['KeyD'] || game.keys['ArrowRight']) steerInput = 1;
 
-  // Gas & irtifa direnci
-  if (CAR.gear > 0 && gas > 0) {
-    const gearMaxKmh = GEAR_MAX_SPD[CAR.gear];
-    const gearFactor = Math.max(0, 1 - spdKmh / gearMaxKmh);
-    const accel = 18 * gearFactor * gas;
-    CAR.speed += accel * dt;
-  }
+    // El freni
+    const handbrake = game.keys['Space'];
 
-  // Fren
-  if (brake > 0 || hbk > 0) {
-    const brakePow = hbk ? 30 : 14;
-    CAR.speed -= brakePow * dt;
-  }
+    // Direksiyon açısı
+    const maxSteer = 0.6;
+    const steerSpeed = 3;
+    car.wheelAngle += (steerInput * maxSteer - car.wheelAngle) * steerSpeed * dt;
 
-  // Sürtünme & hava direnci
-  const friction = 2.5;
-  const aero     = 0.0009 * CAR.speed * CAR.speed;
-  CAR.speed -= (friction + aero) * dt;
-  CAR.speed  = Math.max(0, Math.min(CAR.speed, MAX_SPEED));
+    // Hız hesaplama
+    const gearRatio = gearRatios[car.gear] || 0;
+    const enginePower = 800;
+    const dragCoeff = 0.003;
+    const rollingResistance = 0.001;
 
-  // RPM hesabı
-  if (CAR.gear > 0) {
-    const ratio  = GEAR_RATIOS[CAR.gear];
-    const target = IDLE_RPM + (CAR.speed / MAX_SPEED) * (MAX_RPM - IDLE_RPM) * (ratio / GEAR_RATIOS[1]);
-    CAR.rpm += (target - CAR.rpm) * Math.min(dt * 8, 1);
-    CAR.rpm  = Math.max(IDLE_RPM, Math.min(CAR.rpm, MAX_RPM + 300));
-  } else {
-    CAR.rpm += (IDLE_RPM - CAR.rpm) * Math.min(dt * 5, 1);
-  }
+    if (car.gear !== 0) {
+        const engineForce = throttle * enginePower * gearRatio;
+        const dragForce = -Math.sign(car.speed) * car.speed * car.speed * dragCoeff;
+        const rollForce = -Math.sign(car.speed) * Math.abs(car.speed) * rollingResistance * 100;
+        const brakeForce = brake ? -Math.sign(car.speed) * 2000 : 0;
+        const handbrakeForce = handbrake ? -Math.sign(car.speed) * 1500 : 0;
 
-  // Direksiyon (hıza bağlı)
-  const steerStrength = 0.003 * (1 - spdKmh / 400);
-  if (left)  CAR.lateralOffset -= steerStrength * spdKmh * dt * 60;
-  if (right) CAR.lateralOffset += steerStrength * spdKmh * dt * 60;
-  CAR.lateralOffset *= 0.97;
-  CAR.lateralOffset = Math.max(-ROAD_WIDTH / 2 + 20, Math.min(ROAD_WIDTH / 2 - 20, CAR.lateralOffset));
+        const totalForce = engineForce + dragForce + rollForce + brakeForce + handbrakeForce;
+        car.acceleration = totalForce / 1000;
+        car.speed += car.acceleration * dt;
+    } else {
+        // N vites - sadece sürtünme
+        car.speed *= 0.99;
+    }
 
-  // Konum ilerlet
-  const worldSpeed = CAR.speed / STEP;
-  CAR.roadPos += worldSpeed * dt;
-  if (CAR.roadPos >= roadPoints.length - 2) CAR.roadPos = 0;
+    // Geri viteste hız sınırı
+    if (car.gear === -1 && car.speed < -40) car.speed = -40;
 
-  totalDist += CAR.speed * dt;
+    // RPM hesaplama
+    const wheelRpm = Math.abs(car.speed) * 30;
+    car.rpm = wheelRpm * Math.abs(gearRatio) + 800;
+    if (car.rpm > car.maxRpm) car.rpm = car.maxRpm;
+    if (car.gear === 0) car.rpm = 800 + throttle * 3000;
 
-  // Redline
-  document.body.classList.toggle('redline',   CAR.rpm > 6500);
-  document.body.classList.toggle('overdrive', spdKmh > 180);
+    // Yön değiştirme
+    const speedFactor = Math.min(Math.abs(car.speed) / 100, 1);
+    const turnRate = car.wheelAngle * speedFactor * 2.5;
 
-  updateHUD(spdKmh);
+    // Drift efekti
+    if (handbrake && Math.abs(car.speed) > 30) {
+        car.drift += (car.wheelAngle * 2 - car.drift) * 5 * dt;
+    } else {
+        car.drift *= 0.95;
+    }
+
+    car.angle += turnRate * dt + car.drift * dt;
+
+    // Pozisyon güncelleme
+    car.x += Math.sin(car.angle) * car.speed * dt;
+    car.y += Math.cos(car.angle) * car.speed * dt;
+
+    // Yol sınırları kontrolü
+    const roadCenter = getRoadCenter(car.y);
+    const distFromCenter = car.x - roadCenter.x;
+    const roadHalfWidth = game.road.width / 2 - 15;
+
+    if (Math.abs(distFromCenter) > roadHalfWidth) {
+        // Çimen üzerinde sürtünme
+        car.speed *= 0.95;
+
+        // Yola geri it
+        if (distFromCenter > roadHalfWidth) {
+            car.x = roadCenter.x + roadHalfWidth;
+        } else {
+            car.x = roadCenter.x - roadHalfWidth;
+        }
+    }
+
+    // Kamera takibi
+    game.camera.x += (car.x - game.camera.x) * 5 * dt;
+    game.camera.y = car.y - height * 0.6;
+
+    // Partiküller (toz, duman)
+    if (Math.abs(car.speed) > 10 && (handbrake || Math.abs(car.drift) > 0.3)) {
+        for (let i = 0; i < 2; i++) {
+            game.particles.push({
+                x: car.x + (Math.random() - 0.5) * 20,
+                y: car.y - 15,
+                vx: (Math.random() - 0.5) * 30,
+                vy: (Math.random() - 0.5) * 30,
+                life: 1,
+                size: Math.random() * 5 + 2,
+                color: handbrake ? 'rgba(100,100,100,' : 'rgba(150,150,150,'
+            });
+        }
+    }
+
+    // Kayma izleri
+    if (handbrake && Math.abs(car.speed) > 20) {
+        game.skidMarks.push({
+            x: car.x + Math.sin(car.angle + 0.3) * 12,
+            y: car.y + Math.cos(car.angle + 0.3) * 12,
+            angle: car.angle,
+            life: 300
+        });
+        game.skidMarks.push({
+            x: car.x + Math.sin(car.angle - 0.3) * 12,
+            y: car.y + Math.cos(car.angle - 0.3) * 12,
+            angle: car.angle,
+            life: 300
+        });
+    }
+
+    // Partikül güncelleme
+    game.particles = game.particles.filter(p => {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt * 2;
+        p.size *= 0.98;
+        return p.life > 0;
+    });
+
+    // Kayma izleri güncelleme
+    game.skidMarks = game.skidMarks.filter(s => {
+        s.life--;
+        return s.life > 0;
+    });
+
+    game.time += dt;
 }
 
-// ── HUD Güncelle ────────────────────────────────
-function updateHUD(spdKmh) {
-  document.getElementById('speed-display').textContent = Math.floor(spdKmh);
-  document.getElementById('rpm-display').textContent   = Math.floor(CAR.rpm / 100);
-  document.getElementById('distance-display').textContent =
-    totalDist > 1000 ? (totalDist / 1000).toFixed(2) + ' km' : Math.floor(totalDist) + ' m';
+// Araba çizimi
+function drawCar(ctx, x, y, angle, wheelAngle) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
 
-  const rpmPct = (CAR.rpm - IDLE_RPM) / (MAX_RPM - IDLE_RPM) * 100;
-  document.getElementById('engine-bar-fill').style.width = Math.min(100, rpmPct) + '%';
+    const carWidth = 24;
+    const carLength = 48;
 
-  drawGauge(rpmCtx, 160, 160, CAR.rpm / MAX_RPM, 'RPM', '#29b6f6');
-  drawGauge(spdCtx, 160, 160, spdKmh / MAX_SPEED_KMH, 'KM/H', '#e8a020');
-}
+    // Gövde gölgesi
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(-carWidth/2 + 3, -carLength/2 + 3, carWidth, carLength);
 
-function updateGearUI() {
-  document.getElementById('gear-display').textContent =
-    CAR.gear === 0 ? 'N' : CAR.gear.toString();
-  document.querySelectorAll('.g-btn').forEach(btn => {
-    btn.classList.toggle('active', parseInt(btn.dataset.g) === CAR.gear);
-  });
-}
+    // Ana gövde
+    const gradient = ctx.createLinearGradient(-carWidth/2, 0, carWidth/2, 0);
+    gradient.addColorStop(0, '#cc0000');
+    gradient.addColorStop(0.3, '#ff3333');
+    gradient.addColorStop(0.7, '#ff3333');
+    gradient.addColorStop(1, '#990000');
+    ctx.fillStyle = gradient;
 
-// ── Dairesel Gösterge ───────────────────────────
-function drawGauge(c, w, h, val, label, color) {
-  c.clearRect(0, 0, w, h);
-  const cx = w / 2, cy = h / 2, r = 66;
-  const startA = Math.PI * 0.75, endA = Math.PI * 2.25;
-  const sweep  = startA + (endA - startA) * Math.min(val, 1);
-
-  // Arka plan yay
-  c.beginPath();
-  c.arc(cx, cy, r, startA, endA);
-  c.strokeStyle = 'rgba(255,255,255,0.06)';
-  c.lineWidth = 10;
-  c.lineCap  = 'round';
-  c.stroke();
-
-  // Değer yayı
-  if (val > 0) {
-    const grad = c.createLinearGradient(cx - r, cy, cx + r, cy);
-    grad.addColorStop(0, color + '88');
-    grad.addColorStop(1, color);
-    c.beginPath();
-    c.arc(cx, cy, r, startA, sweep);
-    c.strokeStyle = grad;
-    c.lineWidth = 10;
-    c.stroke();
-  }
-
-  // Kırmızı bölge (son %15)
-  if (val > 0.85) {
-    const redStart = startA + (endA - startA) * 0.85;
-    c.beginPath();
-    c.arc(cx, cy, r, redStart, sweep);
-    c.strokeStyle = '#ff4444cc';
-    c.lineWidth = 10;
-    c.stroke();
-  }
-
-  // İbre
-  const needleA = startA + (endA - startA) * Math.min(val, 1);
-  c.save();
-  c.translate(cx, cy);
-  c.rotate(needleA);
-  c.beginPath();
-  c.moveTo(-8, 0);
-  c.lineTo(r - 12, 0);
-  c.strokeStyle = '#ffffff';
-  c.lineWidth = 2;
-  c.lineCap  = 'round';
-  c.stroke();
-  c.restore();
-
-  // Merkez daire
-  c.beginPath();
-  c.arc(cx, cy, 8, 0, Math.PI * 2);
-  c.fillStyle = color;
-  c.fill();
-
-  // Etiket
-  c.font = 'bold 10px Orbitron, monospace';
-  c.fillStyle = 'rgba(255,255,255,0.4)';
-  c.textAlign = 'center';
-  c.fillText(label, cx, cy + 28);
-}
-
-// ── 3D Yol Render ───────────────────────────────
-function render() {
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-
-  // Gökyüzü gradyanı
-  const sky = ctx.createLinearGradient(0, 0, 0, H * 0.55);
-  sky.addColorStop(0,   '#050810');
-  sky.addColorStop(0.4, '#0a1220');
-  sky.addColorStop(1,   '#0f1e30');
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, W, H * 0.55);
-
-  // Yıldızlar (sabit seed)
-  drawStars(W, H);
-
-  // Zemin
-  const ground = ctx.createLinearGradient(0, H * 0.55, 0, H);
-  ground.addColorStop(0, '#0d1a0d');
-  ground.addColorStop(1, '#060e06');
-  ctx.fillStyle = ground;
-  ctx.fillRect(0, H * 0.55, W, H * 0.45);
-
-  drawRoad3D(W, H);
-  drawCar(W, H);
-}
-
-// Statik yıldızlar
-const STARS = Array.from({ length: 120 }, () => ({
-  x: Math.random(), y: Math.random() * 0.55,
-  r: Math.random() * 1.2 + 0.3,
-  a: Math.random() * 0.6 + 0.4
-}));
-
-function drawStars(W, H) {
-  for (const s of STARS) {
+    // Üst gövde (kabin)
     ctx.beginPath();
-    ctx.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(200,220,255,${s.a})`;
+    ctx.moveTo(-carWidth/2 + 2, -carLength/2 + 8);
+    ctx.lineTo(-carWidth/2 + 2, carLength/2 - 5);
+    ctx.quadraticCurveTo(-carWidth/2 + 2, carLength/2, 0, carLength/2);
+    ctx.quadraticCurveTo(carWidth/2 - 2, carLength/2, carWidth/2 - 2, carLength/2 - 5);
+    ctx.lineTo(carWidth/2 - 2, -carLength/2 + 8);
+    ctx.quadraticCurveTo(carWidth/2 - 2, -carLength/2, 0, -carLength/2);
+    ctx.quadraticCurveTo(-carWidth/2 + 2, -carLength/2, -carWidth/2 + 2, -carLength/2 + 8);
     ctx.fill();
-  }
+
+    // Cam
+    ctx.fillStyle = '#1a1a2e';
+    ctx.beginPath();
+    ctx.moveTo(-carWidth/2 + 4, -carLength/2 + 12);
+    ctx.lineTo(-carWidth/2 + 4, 5);
+    ctx.lineTo(carWidth/2 - 4, 5);
+    ctx.lineTo(carWidth/2 - 4, -carLength/2 + 12);
+    ctx.fill();
+
+    // Cam yansıması
+    ctx.fillStyle = 'rgba(100,150,255,0.2)';
+    ctx.beginPath();
+    ctx.moveTo(-carWidth/2 + 6, -carLength/2 + 14);
+    ctx.lineTo(-carWidth/2 + 6, -2);
+    ctx.lineTo(-2, -2);
+    ctx.lineTo(-2, -carLength/2 + 14);
+    ctx.fill();
+
+    // Farlar
+    ctx.fillStyle = '#ffffcc';
+    ctx.shadowColor = '#ffffaa';
+    ctx.shadowBlur = 10;
+    ctx.fillRect(-carWidth/2 + 3, -carLength/2 + 2, 6, 4);
+    ctx.fillRect(carWidth/2 - 9, -carLength/2 + 2, 6, 4);
+    ctx.shadowBlur = 0;
+
+    // Stop lambaları
+    ctx.fillStyle = '#ff0000';
+    ctx.shadowColor = '#ff0000';
+    ctx.shadowBlur = 8;
+    ctx.fillRect(-carWidth/2 + 3, carLength/2 - 5, 6, 4);
+    ctx.fillRect(carWidth/2 - 9, carLength/2 - 5, 6, 4);
+    ctx.shadowBlur = 0;
+
+    // Kapı çizgileri
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-carWidth/2 + 2, -5);
+    ctx.lineTo(carWidth/2 - 2, -5);
+    ctx.stroke();
+
+    // Kapı kolları
+    ctx.fillStyle = '#888';
+    ctx.fillRect(-carWidth/2 + 1, -8, 4, 2);
+    ctx.fillRect(carWidth/2 - 5, -8, 4, 2);
+
+    // Tekerlekler
+    const wheelWidth = 6;
+    const wheelLength = 12;
+    const wheelPositions = [
+        { x: -carWidth/2 - 2, y: -carLength/2 + 10 }, // Sol ön
+        { x: carWidth/2 + 2, y: -carLength/2 + 10 },  // Sağ ön
+        { x: -carWidth/2 - 2, y: carLength/2 - 10 },  // Sol arka
+        { x: carWidth/2 + 2, y: carLength/2 - 10 }    // Sağ arka
+    ];
+
+    wheelPositions.forEach((pos, i) => {
+        ctx.save();
+        ctx.translate(pos.x, pos.y);
+        // Ön tekerlekler döner
+        if (i < 2) ctx.rotate(wheelAngle * 0.5);
+
+        // Lastik
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(-wheelWidth/2, -wheelLength/2, wheelWidth, wheelLength);
+
+        // Jant
+        ctx.fillStyle = '#888';
+        ctx.fillRect(-wheelWidth/2 + 1, -wheelLength/2 + 2, wheelWidth - 2, wheelLength - 4);
+
+        // Jant detayı
+        ctx.fillStyle = '#aaa';
+        ctx.fillRect(-1, -wheelLength/2 + 4, 2, wheelLength - 8);
+
+        ctx.restore();
+    });
+
+    // Spoiler
+    ctx.fillStyle = '#990000';
+    ctx.fillRect(-carWidth/2, carLength/2 - 2, carWidth, 3);
+    ctx.fillRect(-carWidth/2 - 2, carLength/2 - 6, 4, 6);
+    ctx.fillRect(carWidth/2 - 2, carLength/2 - 6, 4, 6);
+
+    ctx.restore();
 }
 
-// Pseudo-3D yol çizimi
-function drawRoad3D(W, H) {
-  const horizon = H * 0.52;
-  const camH    = H * 0.38;
-  const depth   = 350;        // görüş uzaklığı (adım)
-  const VP      = { x: W / 2, y: horizon };
+// Yol çizimi
+function drawRoad(ctx) {
+    const startIndex = Math.max(0, Math.floor(game.camera.y / game.road.segmentLength) - 5);
+    const endIndex = Math.min(game.road.points.length - 1, startIndex + 40);
 
-  const posInt  = Math.floor(CAR.roadPos);
-  const maxDraw = Math.min(depth, roadPoints.length - posInt - 2);
+    // Çimen arka plan
+    ctx.fillStyle = '#2d5016';
+    ctx.fillRect(0, 0, width, height);
 
-  // Çizgiler (ufuktan arabaya doğru, arka plandan öne)
-  for (let i = maxDraw - 1; i >= 0; i--) {
-    const idx  = (posInt + i) % roadPoints.length;
-    const idx1 = (posInt + i + 1) % roadPoints.length;
+    // Çimen dokusu
+    ctx.fillStyle = '#3a6b1a';
+    for (let i = 0; i < 50; i++) {
+        const px = (i * 137 + game.time * 10) % width;
+        const py = (i * 89) % height;
+        ctx.fillRect(px, py, 3, 3);
+    }
 
-    const t0 = i       / maxDraw;
-    const t1 = (i + 1) / maxDraw;
-
-    // Ekran koordinatı (perspektif)
-    const p0 = worldToScreen(idx,  t0, W, H, horizon, camH, VP);
-    const p1 = worldToScreen(idx1, t1, W, H, horizon, camH, VP);
-
-    const halfW0 = perspWidth(t0);
-    const halfW1 = perspWidth(t1);
-
-    // Çimen şeritleri
-    const grassColor = Math.floor(i / 8) % 2 === 0 ? '#0e2b0e' : '#0a220a';
-    ctx.fillStyle = grassColor;
+    // Yol kenarları
+    ctx.fillStyle = '#555';
     ctx.beginPath();
-    ctx.moveTo(p0.x - halfW0 * 2.5, p0.y);
-    ctx.lineTo(p1.x - halfW1 * 2.5, p1.y);
-    ctx.lineTo(p1.x + halfW1 * 2.5, p1.y);
-    ctx.lineTo(p0.x + halfW0 * 2.5, p0.y);
+
+    for (let i = startIndex; i <= endIndex; i++) {
+        const point = game.road.points[i];
+        const screenX = point.x - game.camera.x + width / 2;
+        const screenY = point.y - game.camera.y;
+
+        if (i === startIndex) {
+            ctx.moveTo(screenX - game.road.width/2 - 10, screenY);
+        } else {
+            ctx.lineTo(screenX - game.road.width/2 - 10, screenY);
+        }
+    }
+
+    for (let i = endIndex; i >= startIndex; i--) {
+        const point = game.road.points[i];
+        const screenX = point.x - game.camera.x + width / 2;
+        const screenY = point.y - game.camera.y;
+        ctx.lineTo(screenX + game.road.width/2 + 10, screenY);
+    }
+
     ctx.closePath();
     ctx.fill();
 
     // Asfalt
-    const asphalt = Math.floor(i / 12) % 2 === 0 ? '#1a1a1a' : '#222222';
-    ctx.fillStyle = asphalt;
+    ctx.fillStyle = '#444';
     ctx.beginPath();
-    ctx.moveTo(p0.x - halfW0, p0.y);
-    ctx.lineTo(p1.x - halfW1, p1.y);
-    ctx.lineTo(p1.x + halfW1, p1.y);
-    ctx.lineTo(p0.x + halfW0, p0.y);
+
+    for (let i = startIndex; i <= endIndex; i++) {
+        const point = game.road.points[i];
+        const screenX = point.x - game.camera.x + width / 2;
+        const screenY = point.y - game.camera.y;
+
+        if (i === startIndex) {
+            ctx.moveTo(screenX - game.road.width/2, screenY);
+        } else {
+            ctx.lineTo(screenX - game.road.width/2, screenY);
+        }
+    }
+
+    for (let i = endIndex; i >= startIndex; i--) {
+        const point = game.road.points[i];
+        const screenX = point.x - game.camera.x + width / 2;
+        const screenY = point.y - game.camera.y;
+        ctx.lineTo(screenX + game.road.width/2, screenY);
+    }
+
     ctx.closePath();
     ctx.fill();
 
-    // Yol kenar çizgileri
-    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-    ctx.lineWidth = Math.max(1, halfW0 * 0.03);
+    // Yol çizgileri
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([20, 20]);
+    ctx.beginPath();
+
+    for (let i = startIndex; i <= endIndex; i++) {
+        const point = game.road.points[i];
+        const screenX = point.x - game.camera.x + width / 2;
+        const screenY = point.y - game.camera.y;
+
+        if (i === startIndex) {
+            ctx.moveTo(screenX, screenY);
+        } else {
+            ctx.lineTo(screenX, screenY);
+        }
+    }
+
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Kenar çizgileri
+    ctx.strokeStyle = '#ffcc00';
+    ctx.lineWidth = 3;
+
     // Sol kenar
     ctx.beginPath();
-    ctx.moveTo(p0.x - halfW0,        p0.y);
-    ctx.lineTo(p1.x - halfW1,        p1.y);
+    for (let i = startIndex; i <= endIndex; i++) {
+        const point = game.road.points[i];
+        const screenX = point.x - game.camera.x + width / 2 - game.road.width/2;
+        const screenY = point.y - game.camera.y;
+        if (i === startIndex) ctx.moveTo(screenX, screenY);
+        else ctx.lineTo(screenX, screenY);
+    }
     ctx.stroke();
+
     // Sağ kenar
     ctx.beginPath();
-    ctx.moveTo(p0.x + halfW0,        p0.y);
-    ctx.lineTo(p1.x + halfW1,        p1.y);
+    for (let i = startIndex; i <= endIndex; i++) {
+        const point = game.road.points[i];
+        const screenX = point.x - game.camera.x + width / 2 + game.road.width/2;
+        const screenY = point.y - game.camera.y;
+        if (i === startIndex) ctx.moveTo(screenX, screenY);
+        else ctx.lineTo(screenX, screenY);
+    }
     ctx.stroke();
 
-    // Orta kesikli çizgi
-    if (Math.floor((posInt + i) / 20) % 2 === 0) {
-      ctx.strokeStyle = 'rgba(255,210,0,0.6)';
-      ctx.lineWidth = Math.max(1, halfW0 * 0.015);
-      ctx.beginPath();
-      ctx.moveTo(p0.x, p0.y);
-      ctx.lineTo(p1.x, p1.y);
-      ctx.stroke();
+    // Ağaçlar ve çevre detayları
+    for (let i = startIndex; i <= endIndex; i += 3) {
+        const point = game.road.points[i];
+        const screenX = point.x - game.camera.x + width / 2;
+        const screenY = point.y - game.camera.y;
+
+        // Sol taraf ağaçlar
+        drawTree(ctx, screenX - game.road.width/2 - 40, screenY);
+        // Sağ taraf ağaçlar
+        drawTree(ctx, screenX + game.road.width/2 + 40, screenY);
     }
-  }
 }
 
-function perspWidth(t) {
-  // t=0 ufuk, t=1 araba önü
-  return 14 + t * (ROAD_WIDTH * 0.65);
-}
+function drawTree(ctx, x, y) {
+    // Gövde
+    ctx.fillStyle = '#4a3728';
+    ctx.fillRect(x - 3, y - 10, 6, 15);
 
-function worldToScreen(idx, t, W, H, horizon, camH, VP) {
-  const pt    = roadPoints[idx];
-  const ahead = roadPoints[Math.floor(idx)] || pt;
-
-  // Perspektif Y
-  const screenY = horizon + (1 - t) * 0 + t * camH;
-
-  // Yol eğrisinin X katkısı: yol açısını biriktirerek ekrana yansıt
-  let cumAngle = 0;
-  const base = Math.floor(CAR.roadPos);
-  for (let j = base; j <= idx && j < roadPoints.length - 1; j++) {
-    cumAngle += roadPoints[j].angle !== undefined ? 0 : 0;
-  }
-
-  // Temel hesap: yol merkezini ufuk noktasından uzağa çiz
-  const rx    = roadPoints[idx].x - roadPoints[base].x;
-  const ry    = roadPoints[idx].y - roadPoints[base].y;
-
-  // Kamera yönü: mevcut roadPoint'in açısı
-  const camAngle = roadPoints[base].angle - Math.PI / 2;
-  const local_x  = rx * Math.cos(-camAngle) - ry * Math.sin(-camAngle);
-
-  const screenX = W / 2 + local_x * (1 - t) * 0.8 + CAR.lateralOffset * t * 0;
-
-  return { x: screenX, y: screenY };
-}
-
-// ── Araba Çizimi ─────────────────────────────────
-function drawCar(W, H) {
-  const cx = W / 2 + CAR.lateralOffset * 0.8;
-  const cy = H * 0.72;
-
-  const steer = (keys['ArrowLeft'] ? -1 : 0) + (keys['ArrowRight'] ? 1 : 0);
-
-  ctx.save();
-  ctx.translate(cx, cy);
-
-  // Gövde gölgesi
-  ctx.shadowColor = 'rgba(0,0,0,0.8)';
-  ctx.shadowBlur  = 24;
-  ctx.shadowOffsetY = 12;
-
-  // Ana gövde
-  const bodyGrad = ctx.createLinearGradient(-50, -22, 50, 22);
-  bodyGrad.addColorStop(0,   '#b0120a');
-  bodyGrad.addColorStop(0.3, '#e01a10');
-  bodyGrad.addColorStop(0.7, '#c01510');
-  bodyGrad.addColorStop(1,   '#8a0d08');
-  ctx.fillStyle = bodyGrad;
-
-  ctx.beginPath();
-  ctx.moveTo(-52, 14);
-  ctx.lineTo(-52, 0);
-  ctx.lineTo(-38, -18);
-  ctx.lineTo(-12, -24);
-  ctx.lineTo( 14, -24);
-  ctx.lineTo( 36, -16);
-  ctx.lineTo( 52, 0);
-  ctx.lineTo( 52, 14);
-  ctx.closePath();
-  ctx.fill();
-
-  // Kaput
-  const hoodGrad = ctx.createLinearGradient(-52, -18, 52, -18);
-  hoodGrad.addColorStop(0,   '#c0140c');
-  hoodGrad.addColorStop(0.5, '#ff2010');
-  hoodGrad.addColorStop(1,   '#a01008');
-  ctx.fillStyle = hoodGrad;
-  ctx.beginPath();
-  ctx.moveTo(-52, 0);
-  ctx.lineTo(-38, -18);
-  ctx.lineTo(-12, -24);
-  ctx.lineTo( 14, -24);
-  ctx.lineTo( 36, -16);
-  ctx.lineTo( 52, 0);
-  ctx.closePath();
-  ctx.fill();
-
-  // Ön ızgara
-  ctx.fillStyle = '#111';
-  ctx.beginPath();
-  ctx.moveTo(36, -8);
-  ctx.lineTo(52, 0);
-  ctx.lineTo(52, 8);
-  ctx.lineTo(36, 4);
-  ctx.closePath();
-  ctx.fill();
-
-  // Ön farlar
-  ctx.shadowColor = '#ffee88';
-  ctx.shadowBlur  = 18;
-  ctx.fillStyle = '#ffffcc';
-  ctx.beginPath(); ctx.ellipse(50, -3, 6, 4, 0.2, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(50,  5, 6, 4, -0.1, 0, Math.PI * 2); ctx.fill();
-
-  // Far huzmesi
-  if (CAR.speed > 0.5) {
-    const beamGrad = ctx.createRadialGradient(52, 0, 0, 52, 0, 90);
-    beamGrad.addColorStop(0,   'rgba(255,255,180,0.18)');
-    beamGrad.addColorStop(1,   'rgba(255,255,180,0)');
-    ctx.fillStyle = beamGrad;
+    // Yapraklar
+    ctx.fillStyle = '#1a5c1a';
     ctx.beginPath();
-    ctx.moveTo(52, -4);
-    ctx.lineTo(140, -40 + steer * 20);
-    ctx.lineTo(140,  40 + steer * 20);
-    ctx.lineTo(52,  4);
+    ctx.moveTo(x, y - 35);
+    ctx.lineTo(x - 15, y - 10);
+    ctx.lineTo(x + 15, y - 10);
     ctx.closePath();
     ctx.fill();
-  }
 
-  ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
-
-  // Ön cam
-  const windshieldGrad = ctx.createLinearGradient(-12, -24, 14, -24);
-  windshieldGrad.addColorStop(0, 'rgba(120,200,255,0.5)');
-  windshieldGrad.addColorStop(1, 'rgba(60,130,200,0.3)');
-  ctx.fillStyle = windshieldGrad;
-  ctx.strokeStyle = '#333';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(-10, -14);
-  ctx.lineTo(-12, -24);
-  ctx.lineTo( 14, -24);
-  ctx.lineTo( 16, -14);
-  ctx.closePath();
-  ctx.fill(); ctx.stroke();
-
-  // Çatı
-  const roofGrad = ctx.createLinearGradient(-10, -28, 10, -14);
-  roofGrad.addColorStop(0, '#cc1810');
-  roofGrad.addColorStop(1, '#8a0d08');
-  ctx.fillStyle = roofGrad;
-  ctx.beginPath();
-  ctx.moveTo(-10, -14);
-  ctx.lineTo(-8,  -28);
-  ctx.lineTo( 8,  -28);
-  ctx.lineTo( 16, -14);
-  ctx.closePath();
-  ctx.fill();
-
-  // Arka stop lambalar
-  ctx.shadowColor = CAR.braking ? '#ff2200' : '#880000';
-  ctx.shadowBlur  = CAR.braking ? 20 : 8;
-  ctx.fillStyle   = CAR.braking ? '#ff4400' : '#cc2200';
-  ctx.beginPath(); ctx.ellipse(-51, -4, 5, 3,  0.15, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(-51,  4, 5, 3, -0.15, 0, Math.PI * 2); ctx.fill();
-
-  ctx.shadowBlur = 0;
-
-  // Ön tekerlekler (yönlü)
-  drawWheel(ctx, 38,  18, steer * 0.35);
-  drawWheel(ctx, 38, -18, steer * 0.35);
-  // Arka tekerlekler
-  drawWheel(ctx, -36,  18, 0);
-  drawWheel(ctx, -36, -18, 0);
-
-  ctx.restore();
+    ctx.fillStyle = '#2d7a2d';
+    ctx.beginPath();
+    ctx.moveTo(x, y - 45);
+    ctx.lineTo(x - 12, y - 20);
+    ctx.lineTo(x + 12, y - 20);
+    ctx.closePath();
+    ctx.fill();
 }
 
-function drawWheel(c, x, y, steer) {
-  c.save();
-  c.translate(x, y);
-  c.rotate(steer);
-
-  // Dış lastik
-  c.fillStyle = '#1a1a1a';
-  c.strokeStyle = '#333';
-  c.lineWidth = 1;
-  c.beginPath();
-  c.ellipse(0, 0, 10, 7, 0, 0, Math.PI * 2);
-  c.fill(); c.stroke();
-
-  // Jant
-  c.fillStyle = '#888';
-  c.beginPath();
-  c.ellipse(0, 0, 5, 3.5, 0, 0, Math.PI * 2);
-  c.fill();
-
-  // Jant kolları
-  c.strokeStyle = '#aaa';
-  c.lineWidth = 1;
-  for (let i = 0; i < 5; i++) {
-    const a = (i / 5) * Math.PI * 2;
-    c.beginPath();
-    c.moveTo(0, 0);
-    c.lineTo(Math.cos(a) * 4.5, Math.sin(a) * 3.5 * 0.7);
-    c.stroke();
-  }
-
-  c.restore();
+// Kayma izleri çizimi
+function drawSkidMarks(ctx) {
+    game.skidMarks.forEach(mark => {
+        const alpha = mark.life / 300;
+        ctx.strokeStyle = `rgba(20,20,20,${alpha * 0.6})`;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(
+            mark.x - Math.sin(mark.angle) * 5 - game.camera.x + width / 2,
+            mark.y - Math.cos(mark.angle) * 5 - game.camera.y
+        );
+        ctx.lineTo(
+            mark.x + Math.sin(mark.angle) * 5 - game.camera.x + width / 2,
+            mark.y + Math.cos(mark.angle) * 5 - game.camera.y
+        );
+        ctx.stroke();
+    });
 }
 
-// ── Ana Döngü ───────────────────────────────────
-updateGearUI();
-
-function loop(ts) {
-  update(ts);
-  render();
-  requestAnimationFrame(loop);
+// Partiküller çizimi
+function drawParticles(ctx) {
+    game.particles.forEach(p => {
+        ctx.fillStyle = p.color + p.life + ')';
+        ctx.beginPath();
+        ctx.arc(
+            p.x - game.camera.x + width / 2,
+            p.y - game.camera.y,
+            p.size,
+            0,
+            Math.PI * 2
+        );
+        ctx.fill();
+    });
 }
-requestAnimationFrame(ts => { lastTime = ts; loop(ts); });
+
+// HUD güncelleme
+function updateHUD() {
+    const car = game.car;
+
+    // Hız göstergesi
+    const speedElement = document.getElementById('speedDisplay');
+    const needleElement = document.getElementById('needle');
+    const speed = Math.abs(Math.round(car.speed));
+    speedElement.textContent = speed;
+
+    // İbre açısı (-135 derece = 0, 135 derece = max)
+    const maxSpeedDisplay = 280;
+    const angle = -135 + (speed / maxSpeedDisplay) * 270;
+    needleElement.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+
+    // Vites göstergesi
+    const gearElement = document.getElementById('gearDisplay');
+    const gearNames = { '-1': 'R', '0': 'N', '1': '1', '2': '2', '3': '3', '4': '4', '5': '5' };
+    gearElement.textContent = gearNames[car.gear] || 'N';
+
+    // RPM bar
+    const rpmBar = document.getElementById('rpmBar');
+    const rpmPercent = (car.rpm / car.maxRpm) * 100;
+    rpmBar.style.height = rpmPercent + '%';
+
+    // RPM rengi
+    if (rpmPercent > 80) {
+        rpmBar.style.background = 'linear-gradient(to top, #ff3333, #ff0000)';
+    } else if (rpmPercent > 60) {
+        rpmBar.style.background = 'linear-gradient(to top, #ffff00, #ffaa00)';
+    } else {
+        rpmBar.style.background = 'linear-gradient(to top, #00ff88, #88ff00)';
+    }
+}
+
+// Ana oyun döngüsü
+let lastTime = 0;
+function gameLoop(timestamp) {
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+    lastTime = timestamp;
+
+    updatePhysics(dt);
+
+    // Çizim
+    ctx.clearRect(0, 0, width, height);
+
+    drawRoad(ctx);
+    drawSkidMarks(ctx);
+    drawParticles(ctx);
+
+    // Araba çizimi
+    const carScreenX = game.car.x - game.camera.x + width / 2;
+    const carScreenY = game.car.y - game.camera.y;
+    drawCar(ctx, carScreenX, carScreenY, game.car.angle, game.car.wheelAngle);
+
+    // Far ışınları (gece efekti)
+    if (game.keys['KeyF']) {
+        ctx.save();
+        ctx.translate(carScreenX, carScreenY);
+        ctx.rotate(game.car.angle);
+
+        const lightGradient = ctx.createLinearGradient(0, -20, 0, -200);
+        lightGradient.addColorStop(0, 'rgba(255,255,200,0.4)');
+        lightGradient.addColorStop(1, 'rgba(255,255,200,0)');
+
+        ctx.fillStyle = lightGradient;
+        ctx.beginPath();
+        ctx.moveTo(-8, -20);
+        ctx.lineTo(-30, -200);
+        ctx.lineTo(30, -200);
+        ctx.lineTo(8, -20);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    updateHUD();
+
+    requestAnimationFrame(gameLoop);
+}
+
+// Başlat
+requestAnimationFrame(gameLoop);
