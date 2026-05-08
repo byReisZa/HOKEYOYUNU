@@ -1,206 +1,30 @@
-
 /* style.css */
-:root {
-  --cam-panel: rgba(12, 16, 24, 0.58);
-  --cam-border: rgba(255, 255, 255, 0.14);
-  --neon: #6cf4ff;
-  --danger: #ff445f;
-  --ok: #71ff89;
-}
-
-* {
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-}
-
+* { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
-  margin: 0;
-  height: 100%;
-  overflow: hidden;
-  background: #05070e;
-  color: #ebf7ff;
-  font-family: "Segoe UI", Inter, Roboto, sans-serif;
+  width: 100%; height: 100%; overflow: hidden;
+  font-family: Inter, Segoe UI, Arial, sans-serif;
+  background: #080b12; color: #eaf6ff;
 }
+canvas { display: block; }
 
-#oyun-kabugu {
-  position: fixed;
-  inset: 0;
+#ui {
+  position: fixed; top: 12px; left: 12px; z-index: 10;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
 }
-
-canvas {
-  display: block;
-}
-
-#hud {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(120px, 1fr));
-  gap: 10px;
-  z-index: 8;
-}
-
-.panel {
-  background: linear-gradient(180deg, rgba(35, 49, 64, 0.48), var(--cam-panel));
-  border: 1px solid var(--cam-border);
-  border-radius: 12px;
-  padding: 10px 12px;
-  backdrop-filter: blur(6px);
-  min-width: 120px;
-}
-
-.label {
-  opacity: 0.75;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 1.4px;
-}
-
-.panel > div:last-child {
-  font-size: 26px;
-  font-weight: 700;
-}
-
-.panel span {
-  font-size: 11px;
-  font-weight: 500;
-  opacity: 0.8;
-}
-
-#minimap {
-  position: absolute;
-  right: 14px;
-  top: 14px;
-  border-radius: 14px;
-  border: 1px solid var(--cam-border);
-  background: rgba(6, 9, 12, 0.55);
-  backdrop-filter: blur(5px);
-  z-index: 8;
-}
-
-#crosshair {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  opacity: 0.38;
-  pointer-events: none;
-  z-index: 7;
-}
-
-#menu-butonlar {
-  position: absolute;
-  right: 14px;
-  bottom: 14px;
-  display: flex;
-  gap: 8px;
-  z-index: 9;
-}
-
-button {
-  border: 1px solid var(--cam-border);
-  background: linear-gradient(180deg, rgba(96, 138, 183, 0.44), rgba(16, 24, 40, 0.72));
-  color: #eafaff;
+.card, button {
+  background: rgba(15, 22, 35, 0.72);
+  border: 1px solid rgba(255,255,255,.16);
   border-radius: 10px;
-  padding: 10px 14px;
-  font-weight: 600;
-  cursor: pointer;
+  padding: 8px 12px;
+  backdrop-filter: blur(6px);
 }
+button { color: #eaf6ff; cursor: pointer; }
 
-button:hover {
-  filter: brightness(1.08);
+#start {
+  position: fixed; inset: 0; z-index: 20;
+  display: grid; place-content: center; text-align: center; gap: 12px;
+  background: radial-gradient(circle, rgba(10,15,25,.45), rgba(7,9,14,.92));
 }
-
-.overlay {
-  position: absolute;
-  inset: 0;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  background: radial-gradient(circle at center, rgba(8, 14, 20, 0.4), rgba(6, 8, 13, 0.85));
-  z-index: 12;
-}
-
-.overlay.acik {
-  display: flex;
-}
-
-.kart {
-  width: min(560px, calc(100vw - 32px));
-  border-radius: 18px;
-  border: 1px solid var(--cam-border);
-  background: linear-gradient(160deg, rgba(15, 28, 41, 0.82), rgba(10, 13, 20, 0.88));
-  padding: 24px;
-  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.45);
-}
-
-.kart h1,
-.kart h2 {
-  margin-top: 0;
-}
-
-.ayar {
-  margin: 12px 0;
-  display: grid;
-  gap: 6px;
-}
-
-input[type="range"] {
-  width: 100%;
-}
-
-#mobil-kontrol {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 14px;
-  display: none;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  padding: 0 14px;
-  z-index: 11;
-}
-
-#mobil-kontrol button {
-  padding: 12px 4px;
-  font-size: 12px;
-}
-
-@media (max-width: 960px) {
-  #hud {
-    top: 8px;
-    left: 8px;
-    gap: 6px;
-    grid-template-columns: repeat(2, minmax(92px, 1fr));
-  }
-
-  .panel {
-    padding: 7px 9px;
-    min-width: 92px;
-  }
-
-  .panel > div:last-child {
-    font-size: 18px;
-  }
-
-  #minimap {
-    width: 150px;
-    height: 150px;
-    right: 8px;
-    top: 8px;
-  }
-
-  #menu-butonlar {
-    right: 8px;
-    bottom: 8px;
-  }
-
-  #mobil-kontrol {
-    display: grid;
-  }
-}
+#start h1 { font-size: 38px; }
+#start p { opacity: .9; }
+#start.hidden { display: none; }
