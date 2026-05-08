@@ -202,12 +202,15 @@ canvas.addEventListener('touchstart', e => {
 }, { passive: false });
 
 // ─── BOT AI ───────────────────────────────────────────────────────────────────
+// ─── BOT AI ───────────────────────────────────────────────────────────────────
 function updateBot() {
-  // Predict where ball will be when it reaches bot Y
+  // Bot tepki gecikmesi - her zaman anlık değil, biraz geç kalsın
+  const reactionDelay = 0.65; // 0 = anlık, 1 = hiç hareket etmez
+  
   let bx = ball.x, by = ball.y, bvx = ball.vx, bvy = ball.vy;
 
   if (bvy < 0) {
-    // Simulate ball path
+    // Top bot tarafına geliyor - simülasyon
     let steps = 0;
     while (by > bot.y + bot.h && steps < 500) {
       bx += bvx;
@@ -221,8 +224,19 @@ function updateBot() {
   const targetCenter = bvy < 0 ? bx : W / 2;
   const botCenter = bot.x + bot.w / 2;
   const diff = targetCenter - botCenter;
-  const speed = Math.min(Math.abs(diff), Math.min(W, H) * 0.013);
-  bot.x += Math.sign(diff) * speed;
+  
+  // Hız sınırlaması - bot çok hızlı hareket edemesin
+  const maxBotSpeed = Math.min(W, H) * 0.009; // Daha yavaş (önceki 0.013'tü)
+  
+  // Hata payı ekle - bot her zaman tam ortaya gitmesin
+  const errorMargin = bot.w * 0.25; // Paddle genişliğinin %25'i kadar hata
+  const randomError = (Math.random() - 0.5) * 2 * errorMargin;
+  const adjustedTarget = targetCenter + randomError;
+  
+  const adjustedDiff = adjustedTarget - botCenter;
+  const speed = Math.min(Math.abs(adjustedDiff), maxBotSpeed) * reactionDelay;
+  
+  bot.x += Math.sign(adjustedDiff) * speed;
   bot.x = Math.max(0, Math.min(W - bot.w, bot.x));
 }
 
