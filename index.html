@@ -3,46 +3,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Araba Simülatörü</title>
+    <title>3D Araba Yarış Oyunu</title>
     <link rel="stylesheet" href="style.css">
-<base target="_blank">
 </head>
 <body>
-    <div class="game-container">
-        <canvas id="gameCanvas"></canvas>
-
-        <div class="hud">
-            <div class="speedometer">
-                <div class="gauge-bg"></div>
-                <div class="gauge-needle" id="needle"></div>
-                <div class="speed-value" id="speedDisplay">0</div>
-                <div class="speed-unit">km/h</div>
-            </div>
-
-            <div class="gear-display">
-                <div class="gear-label">VİTES</div>
-                <div class="gear-value" id="gearDisplay">N</div>
-            </div>
-
-            <div class="rpm-display">
-                <div class="rpm-bar-container">
-                    <div class="rpm-bar" id="rpmBar"></div>
-                </div>
-                <div class="rpm-label">RPM</div>
-            </div>
-
-            <div class="controls-hint">
-                <div class="hint-item"><span class="key">W</span> Gaz</div>
-                <div class="hint-item"><span class="key">S</span> Fren</div>
-                <div class="hint-item"><span class="key">A</span> Sol</div>
-                <div class="hint-item"><span class="key">D</span> Sağ</div>
-                <div class="hint-item"><span class="key">Q</span> Vites Yükselt</div>
-                <div class="hint-item"><span class="key">E</span> Vites Düşür</div>
-                <div class="hint-item"><span class="key">Space</span> El Freni</div>
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- HUD Elements -->
+    <div id="hud">
+        <!-- Speedometer -->
+        <div id="speedometer" class="hud-item">
+            <div class="speed-value" id="speedValue">0</div>
+            <div class="speed-label">km/h</div>
+            <div class="speed-bar">
+                <div id="speedBar" class="speed-bar-fill"></div>
             </div>
         </div>
+        
+        <!-- RPM Meter -->
+        <div id="rpmMeter" class="hud-item">
+            <div class="rpm-value" id="rpmValue">0</div>
+            <div class="rpm-label">RPM</div>
+            <div class="rpm-bar">
+                <div id="rpmBar" class="rpm-bar-fill"></div>
+            </div>
+        </div>
+        
+        <!-- Gear Indicator -->
+        <div id="gearIndicator" class="hud-item">
+            <div class="gear-value" id="gearValue">P</div>
+            <div class="gear-label">Vites</div>
+        </div>
+        
+        <!-- Fuel Indicator -->
+        <div id="fuelIndicator" class="hud-item">
+            <div class="fuel-bar">
+                <div id="fuelBar" class="fuel-bar-fill"></div>
+            </div>
+            <div class="fuel-label">Benzin</div>
+        </div>
+        
+        <!-- Nitro Indicator -->
+        <div id="nitroIndicator" class="hud-item">
+            <div class="nitro-bar">
+                <div id="nitroBar" class="nitro-bar-fill"></div>
+            </div>
+            <div class="nitro-label">Nitro</div>
+        </div>
+        
+        <!-- Minimap -->
+        <div id="minimap" class="hud-item">
+            <canvas id="minimapCanvas" width="150" height="150"></canvas>
+        </div>
+        
+        <!-- FPS Counter -->
+        <div id="fpsCounter" class="hud-item">FPS: 60</div>
+        
+        <!-- Camera Mode -->
+        <div id="cameraMode" class="hud-item">Kamera: 3. Kişi</div>
+        
+        <!-- Controls Info -->
+        <div id="controlsInfo" class="hud-item">
+            <span>W/S - Hareket</span> | 
+            <span>A/D - Diş</span> | 
+            <span>SPACE - Handbrake</span> | 
+            <span>SHIFT - Nitro</span> | 
+            <span>C - Kamera</span> | 
+            <span>ESC - Menü</span>
+        </div>
     </div>
-
-    <script src="app.js"></script>
+    
+    <!-- Pause Menu -->
+    <div id="pauseMenu" class="menu hidden">
+        <div class="menu-content">
+            <h1>OYUN DURAKLADI</h1>
+            <button id="resumeBtn" class="menu-btn">Devam Et</button>
+            <button id="settingsBtn" class="menu-btn">Ayarlar</button>
+            <button id="resetBtn" class="menu-btn">Sıfırla</button>
+        </div>
+    </div>
+    
+    <!-- Settings Menu -->
+    <div id="settingsMenu" class="menu hidden">
+        <div class="menu-content">
+            <h1>AYARLAR</h1>
+            <div class="setting-item">
+                <label>Ses Seviyesi: <span id="volumeValue">100</span>%</label>
+                <input type="range" id="volumeSlider" min="0" max="100" value="100">
+            </div>
+            <div class="setting-item">
+                <label>Grafik Kalitesi:</label>
+                <select id="qualitySelect">
+                    <option value="low">Düşük</option>
+                    <option value="medium" selected>Orta</option>
+                    <option value="high">Yüksek</option>
+                </select>
+            </div>
+            <div class="setting-item">
+                <label>
+                    <input type="checkbox" id="shadowToggle" checked>
+                    Gölgeler
+                </label>
+            </div>
+            <div class="setting-item">
+                <label>
+                    <input type="checkbox" id="bloomToggle" checked>
+                    Bloom Efekti
+                </label>
+            </div>
+            <button id="backBtn" class="menu-btn">Geri</button>
+        </div>
+    </div>
+    
+    <!-- Loading Screen -->
+    <div id="loadingScreen" class="loading-screen">
+        <div class="loading-content">
+            <h1>3D ARABA OYUNU</h1>
+            <div class="loading-bar">
+                <div id="loadingBar" class="loading-bar-fill"></div>
+            </div>
+            <p id="loadingText">Yükleniyor...</p>
+        </div>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="main.js"></script>
 </body>
 </html>
