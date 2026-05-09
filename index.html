@@ -1,159 +1,148 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>UrbanDrive 3D</title>
-  <link rel="stylesheet" href="style.css" />
-
-  <!-- Three.js CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0a1020">
+  <title>Kentsel Sürüş — 3D (Three.js)</title>
+  <meta name="description" content="GitHub Pages uyumlu, optimize 3D açık dünya araba oyunu.">
+  <!-- Tek CSS: göreli yol Pages için -->
+  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
+  <!-- Oyun kabuğu: WebGL canvas buraya eklenir -->
+  <div id="app"></div>
 
-  <!-- ===== LOADING SCREEN ===== -->
-  <div id="loading-screen">
-    <div class="loading-content">
-      <div class="logo-text">URBAN<span>DRIVE</span></div>
-      <div class="loading-bar-wrap">
-        <div class="loading-bar" id="loading-bar"></div>
+  <!-- Yükleme ekranı -->
+  <div id="screen-loading" class="screen screen-visible" aria-live="polite">
+    <div class="card card-loading">
+      <div class="logo-ring" aria-hidden="true"></div>
+      <h1>Kentsel Sürüş</h1>
+      <p class="muted">Harita, trafik ve post-proses yükleniyor…</p>
+      <div class="progress-wrap">
+        <div id="loading-bar" class="progress-bar" style="width: 0%"></div>
       </div>
-      <div class="loading-label" id="loading-label">Yükleniyor... 0%</div>
+      <p id="loading-status" class="small">0%</p>
     </div>
   </div>
 
-  <!-- ===== MAIN MENU ===== -->
-  <div id="main-menu" class="hidden">
-    <div class="menu-bg"></div>
-    <div class="menu-content">
-      <div class="menu-logo">URBAN<span>DRIVE</span></div>
-      <div class="menu-subtitle">Gerçekçi 3D Şehir Sürüş Simülasyonu</div>
-      <div class="menu-buttons">
-        <button class="menu-btn primary" id="btn-play">OYNA</button>
-        <button class="menu-btn" id="btn-settings">AYARLAR</button>
-      </div>
-      <div class="menu-controls">
-        <span>WASD / Ok Tuşları • Boşluk: El Freni • N: Nitro • C: Kamera • R: Reset • H: Farlar</span>
+  <!-- Başlangıç menüsü -->
+  <div id="screen-start" class="screen">
+    <div class="card">
+      <h1>Kentsel Sürüş</h1>
+      <p class="muted">
+        <strong>WASD</strong> sürüş, <strong>Space</strong> el freni / drift,
+        <strong>Shift</strong> nitro, <strong>C</strong> kamera,
+        <strong>P</strong> duraklat, <strong>R</strong> sıfırlama.
+      </p>
+      <div class="btn-row">
+        <button type="button" id="btn-play" class="btn primary">Serbest Sürüşe Başla</button>
+        <button type="button" id="btn-open-settings-start" class="btn">Ayarlar</button>
       </div>
     </div>
   </div>
 
-  <!-- ===== SETTINGS MENU ===== -->
-  <div id="settings-menu" class="hidden">
-    <div class="settings-panel">
-      <h2>AYARLAR</h2>
-      <div class="setting-row">
-        <label>Grafik Kalitesi</label>
-        <div class="btn-group">
-          <button class="quality-btn active" data-q="low">DÜŞÜK</button>
-          <button class="quality-btn" data-q="medium">ORTA</button>
-          <button class="quality-btn" data-q="high">YÜKSEK</button>
-        </div>
+  <!-- Ayarlar -->
+  <div id="screen-settings" class="screen">
+    <div class="card card-wide">
+      <h2>Ayarlar</h2>
+      <div class="field">
+        <label for="set-quality">Grafik kalitesi</label>
+        <select id="set-quality">
+          <option value="low">Düşük (60 FPS hedefi)</option>
+          <option value="medium" selected>Orta</option>
+          <option value="high">Yüksek (bloom + SSAO)</option>
+        </select>
       </div>
-      <div class="setting-row">
-        <label>Ses</label>
-        <input type="range" id="vol-slider" min="0" max="100" value="70" />
+      <div class="field inline">
+        <label>
+          <input type="checkbox" id="set-mobile-mode"> Mobil performans modu
+        </label>
+        <span class="hint">Gölgeler, mesafe ve efektler kısılır.</span>
       </div>
-      <div class="setting-row">
-        <label>Gölgeler</label>
-        <label class="toggle"><input type="checkbox" id="shadow-toggle" checked /><span class="slider"></span></label>
+      <div class="field inline">
+        <label>
+          <input type="checkbox" id="set-ssao" checked> Hafif SSAO (yüksek kalitede)
+        </label>
       </div>
-      <div class="setting-row">
-        <label>Yapay Zeka Araçları</label>
-        <label class="toggle"><input type="checkbox" id="ai-toggle" checked /><span class="slider"></span></label>
+      <div class="btn-row">
+        <button type="button" id="btn-settings-back" class="btn">Geri</button>
+        <button type="button" id="btn-settings-save" class="btn primary">Kaydet</button>
       </div>
-      <div class="setting-row">
-        <label>Mobil Performans Modu</label>
-        <label class="toggle"><input type="checkbox" id="mobile-toggle" /><span class="slider"></span></label>
-      </div>
-      <button class="menu-btn primary" id="btn-back">GERİ</button>
     </div>
   </div>
 
-  <!-- ===== PAUSE MENU ===== -->
-  <div id="pause-menu" class="hidden">
-    <div class="pause-panel">
-      <h2>OYUN DURAKLATILDI</h2>
-      <button class="menu-btn primary" id="btn-resume">DEVAM ET</button>
-      <button class="menu-btn" id="btn-main-menu">ANA MENÜ</button>
+  <!-- HUD (oyun içi) -->
+  <div id="hud" class="hud hidden">
+    <div class="hud-left">
+      <div class="gauge">
+        <span class="label">Hız</span>
+        <div id="hud-speed" class="big">0 <span class="unit">km/h</span></div>
+      </div>
+      <div class="gauge">
+        <span class="label">Nitro</span>
+        <div class="nitro-bar"><div id="hud-nitro-fill" class="nitro-fill"></div></div>
+      </div>
+      <div class="gauge small">
+        <span class="label">Hasar</span>
+        <div id="hud-damage" class="damage-text">0%</div>
+      </div>
+    </div>
+    <div class="hud-right">
+      <div class="gauge small align-right">
+        <span class="label">FPS</span>
+        <div id="hud-fps" class="mono">0</div>
+      </div>
+      <canvas id="minimap" width="180" height="180" aria-label="Mini harita"></canvas>
+    </div>
+    <div class="hud-bottom">
+      <div id="mission-box" class="mission">
+        <span class="mission-label">Görev</span>
+        <span id="mission-text">Serbest sürüş — şehri keşfedin.</span>
+      </div>
+    </div>
+    <div class="hud-actions">
+      <button type="button" id="btn-pause" class="btn tiny">Duraklat (P)</button>
+      <button type="button" id="btn-camera" class="btn tiny">Kamera (C)</button>
+      <button type="button" id="btn-reset" class="btn tiny">Sıfırla (R)</button>
     </div>
   </div>
 
-  <!-- ===== GAME CANVAS ===== -->
-  <canvas id="game-canvas"></canvas>
-
-  <!-- ===== HUD ===== -->
-  <div id="hud" class="hidden">
-    <!-- Speedometer -->
-    <div class="hud-speedometer">
-      <div class="speed-value" id="speed-display">0</div>
-      <div class="speed-unit">KM/H</div>
-      <div class="gear-display" id="gear-display">N</div>
-    </div>
-
-    <!-- Nitro Bar -->
-    <div class="nitro-container">
-      <div class="nitro-label">NİTRO</div>
-      <div class="nitro-bar-bg">
-        <div class="nitro-bar" id="nitro-bar"></div>
+  <!-- Duraklatma -->
+  <div id="screen-pause" class="screen">
+    <div class="card">
+      <h2>Duraklatıldı</h2>
+      <p class="muted">Devam etmek için butona basın veya P tuşuna tekrar basın.</p>
+      <div class="btn-row">
+        <button type="button" id="btn-resume" class="btn primary">Devam</button>
+        <button type="button" id="btn-settings-pause" class="btn">Ayarlar</button>
       </div>
     </div>
-
-    <!-- Top stats -->
-    <div class="hud-top">
-      <div class="fps-counter" id="fps-counter">60 FPS</div>
-      <div class="camera-mode" id="camera-mode">DIŞ KAMERA</div>
-    </div>
-
-    <!-- Damage indicator -->
-    <div class="damage-bar-wrap">
-      <div class="damage-label">HASAR</div>
-      <div class="damage-bg">
-        <div class="damage-fill" id="damage-fill"></div>
-      </div>
-    </div>
-
-    <!-- Minimap -->
-    <canvas id="minimap" width="160" height="160"></canvas>
-    <div class="minimap-label">HARİTA</div>
-
-    <!-- Mission -->
-    <div class="mission-box" id="mission-box">
-      <div class="mission-title">GÖREV</div>
-      <div class="mission-desc" id="mission-desc">Şehri Keşfet</div>
-    </div>
-
-    <!-- Light indicators -->
-    <div class="light-indicators">
-      <span id="light-ind" class="ind off">FAR</span>
-      <span id="brake-ind" class="ind off">FREN</span>
-      <span id="nitro-ind" class="ind off">NTR</span>
-    </div>
-
-    <!-- Mobile controls -->
-    <div id="mobile-controls">
-      <div id="joystick-zone">
-        <div id="joystick-base">
-          <div id="joystick-handle"></div>
-        </div>
-      </div>
-      <div id="mobile-buttons">
-        <button class="mob-btn" id="mob-brake">FREN</button>
-        <button class="mob-btn" id="mob-nitro">NİTRO</button>
-        <button class="mob-btn" id="mob-handbrake">EL FR.</button>
-        <button class="mob-btn" id="mob-camera">CAM</button>
-        <button class="mob-btn" id="mob-reset">RESET</button>
-        <button class="mob-btn" id="mob-lights">FAR</button>
-      </div>
-    </div>
-
-    <!-- Pause button -->
-    <button id="pause-btn" title="Durdur">⏸</button>
   </div>
 
-  <!-- Drift/Nitro flash overlay -->
-  <div id="speed-lines" class="hidden"></div>
+  <!-- Mobil: sanal joystick + gaz/fren -->
+  <div id="touch-ui" class="touch-ui" aria-hidden="true">
+    <div id="joystick-zone" class="joystick-zone">
+      <div id="joystick-knob" class="joystick-knob"></div>
+      <span class="joystick-hint">Direksiyon</span>
+    </div>
+    <div class="touch-pedals">
+      <button type="button" class="pedal" data-code="KeyS">Fren</button>
+      <button type="button" class="pedal" data-code="KeyW">Gaz</button>
+      <button type="button" class="pedal small" data-code="Space">El freni</button>
+      <button type="button" class="pedal small" data-code="ShiftLeft">Nitro</button>
+    </div>
+  </div>
 
-  <script src="game.js"></script>
+  <!-- Three.js + eklentiler: modül CDN -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="./game.js"></script>
 </body>
 </html>
