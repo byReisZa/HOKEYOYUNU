@@ -1,1450 +1,1373 @@
 /**
- * UrbanDrive 3D - game.js
- * Optimize edilmiş tarayıcı tabanlı 3D araba oyunu
- * Three.js r128 kullanılarak geliştirildi
+ * Kentsel Sürüş — Three.js WebGL oyunu
+ * - GitHub Pages: göreli importmap + ./ yolları
+ * - Sabit zaman adımı + delta time
+ * - Instancing, LOD/mesafe kırpma, gölge & post-proses kalite katmanları
  */
 
-'use strict';
+import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { SSAOPass } from "three/addons/postprocessing/SSAOPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 
-// =====================================================================
-// GLOBAL DURUM
-// =====================================================================
-const G = {
-  scene: null, camera: null, renderer: null,
-  clock: new THREE.Clock(),
-  running: false, paused: false,
-  quality: 'medium',  // low | medium | high
-  shadows: true,
-  aiEnabled: true,
-  mobilePerf: false,
-  volume: 0.7,
-  frameCount: 0,
-  fpsTime: 0,
-  fpsDisplay: 60,
-};
+// ——————————————————————————————————————————————————————————————
+// Ortam & ayarlar (localStorage + mobil algı)
+// ——————————————————————————————————————————————————————————————
 
-// =====================================================================
-// AYARLAR & KALİTE ÖN AYARLARI
-// =====================================================================
-const QUALITY = {
-  low:    { shadowMapSize: 512,  drawDistance: 150, aiCount: 3,  pixelRatio: 1 },
-  medium: { shadowMapSize: 1024, drawDistance: 250, aiCount: 6,  pixelRatio: Math.min(window.devicePixelRatio,1.5) },
-  high:   { shadowMapSize: 2048, drawDistance: 400, aiCount: 10, pixelRatio: Math.min(window.devicePixelRatio,2) },
-};
+const IS_TOUCH = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+const UA_MOBILE = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-// =====================================================================
-// ARABA FİZİĞİ PARAMETRELERI
-// =====================================================================
-const CAR_PARAMS = {
-  maxSpeed: 55,           // m/s (~200 km/h)
-  acceleration: 22,
-  brakeForce: 45,
-  handbrakeForce: 60,
-  friction: 12,
-  turnSpeed: 1.8,
-  maxTurn: 0.55,
-  driftFactor: 0.88,
-  nitroMultiplier: 1.65,
-  nitroDrain: 18,         // birim/s
-  nitroRegen: 5,          // birim/s
-  nitroMax: 100,
-  suspensionAmount: 0.06,
-  mass: 1400,
-};
-
-// =====================================================================
-// YÜKLEME EKRANı YÖNETİMİ
-// =====================================================================
-let loadProgress = 0;
-function setProgress(val, label) {
-  loadProgress = val;
-  const bar = document.getElementById('loading-bar');
-  const lbl = document.getElementById('loading-label');
-  if (bar) bar.style.width = val + '%';
-  if (lbl) lbl.textContent = (label || 'Yükleniyor...') + '  ' + Math.floor(val) + '%';
-}
-
-// =====================================================================
-// BAŞLATMA
-// =====================================================================
-window.addEventListener('DOMContentLoaded', () => {
-  initGame();
+const STORAGE_KEY = "kentsel-surus-settings-v1";
+const defaultSettings = () => ({
+  quality: "medium",
+  mobileMode: UA_MOBILE || IS_TOUCH,
+  ssao: true
 });
 
-async function initGame() {
-  setProgress(5, 'Renderer başlatılıyor');
-  await sleep(50);
-  setupRenderer();
-
-  setProgress(15, 'Sahne oluşturuluyor');
-  await sleep(50);
-  setupScene();
-
-  setProgress(25, 'Aydınlatma kuruluyor');
-  await sleep(50);
-  setupLights();
-
-  setProgress(35, 'Harita oluşturuluyor');
-  await sleep(80);
-  buildCity();
-
-  setProgress(55, 'Araç hazırlanıyor');
-  await sleep(50);
-  setupPlayer();
-
-  setProgress(65, 'AI araçlar oluşturuluyor');
-  await sleep(80);
-  setupAICars();
-
-  setProgress(75, 'Kamera ayarlanıyor');
-  await sleep(30);
-  setupCamera();
-
-  setProgress(85, 'Ses sistemi kuruluyor');
-  await sleep(30);
-  setupAudio();
-
-  setProgress(92, 'Kontroller bağlanıyor');
-  await sleep(30);
-  setupControls();
-  setupMobileControls();
-  setupUI();
-
-  setProgress(100, 'Hazır!');
-  await sleep(400);
-
-  // Yükleme ekranını kaldır, menüyü göster
-  const ls = document.getElementById('loading-screen');
-  ls.style.opacity = '0';
-  setTimeout(() => {
-    ls.style.display = 'none';
-    document.getElementById('main-menu').classList.remove('hidden');
-  }, 600);
-}
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-// =====================================================================
-// RENDERER
-// =====================================================================
-function setupRenderer() {
-  const canvas = document.getElementById('game-canvas');
-  const q = QUALITY[G.quality];
-
-  G.renderer = new THREE.WebGLRenderer({
-    canvas,
-    antialias: G.quality !== 'low',
-    powerPreference: 'high-performance',
-    stencil: false,
-  });
-
-  G.renderer.setPixelRatio(q.pixelRatio);
-  G.renderer.setSize(window.innerWidth, window.innerHeight);
-  G.renderer.shadowMap.enabled = G.shadows;
-  G.renderer.shadowMap.type = G.quality === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
-  G.renderer.outputEncoding = THREE.sRGBEncoding;
-  G.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  G.renderer.toneMappingExposure = 1.1;
-  G.renderer.physicallyCorrectLights = true;
-
-  window.addEventListener('resize', onResize);
-}
-
-function onResize() {
-  if (!G.camera || !G.renderer) return;
-  G.camera.aspect = window.innerWidth / window.innerHeight;
-  G.camera.updateProjectionMatrix();
-  G.renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-// =====================================================================
-// SAHNE
-// =====================================================================
-function setupScene() {
-  G.scene = new THREE.Scene();
-  G.scene.background = new THREE.Color(0x87ceeb);
-  G.scene.fog = new THREE.Fog(0x87ceeb, 80, 280);
-}
-
-// =====================================================================
-// AYDINLATMA
-// =====================================================================
-function setupLights() {
-  // Güneş ışığı (directional)
-  const sun = new THREE.DirectionalLight(0xfffde7, 2.2);
-  sun.position.set(60, 120, 40);
-  sun.castShadow = G.shadows;
-  if (G.shadows) {
-    const q = QUALITY[G.quality];
-    sun.shadow.mapSize.set(q.shadowMapSize, q.shadowMapSize);
-    sun.shadow.camera.near = 0.5;
-    sun.shadow.camera.far = 500;
-    sun.shadow.camera.left   = -120;
-    sun.shadow.camera.right  =  120;
-    sun.shadow.camera.top    =  120;
-    sun.shadow.camera.bottom = -120;
-    sun.shadow.bias = -0.001;
-  }
-  G.scene.add(sun);
-  G.sunLight = sun;
-
-  // Yarım küre ortam ışığı
-  const hemi = new THREE.HemisphereLight(0xc9e8ff, 0x5d8060, 0.8);
-  G.scene.add(hemi);
-
-  // Hafif dolgu ışığı
-  const fill = new THREE.DirectionalLight(0xfff4e0, 0.4);
-  fill.position.set(-40, 30, -60);
-  G.scene.add(fill);
-}
-
-// =====================================================================
-// ŞEHİR HARİTASI
-// =====================================================================
-// Malzeme havuzu - aynı malzemeleri tekrar kullanarak bellek tasarrufu
-const MAT = {};
-function getMat(key, factory) {
-  if (!MAT[key]) MAT[key] = factory();
-  return MAT[key];
-}
-
-// Zemin
-function buildGround() {
-  const geo = new THREE.PlaneGeometry(600, 600);
-  const mat = getMat('ground', () => new THREE.MeshLambertMaterial({ color: 0x3a7d44 }));
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.receiveShadow = true;
-  G.scene.add(mesh);
-}
-
-// Yol ağı
-const ROAD_W = 8;    // tek şerit genişliği
-const BLOCK = 60;    // blok boyutu
-const CITY_GRID = 5; // blok sayısı her yönde
-
-// yol segmentleri [{x1,z1,x2,z2,w}] - minimap ve AI için kullanılıyor
-const roadSegments = [];
-
-function buildRoads() {
-  const mat = getMat('road', () => new THREE.MeshLambertMaterial({ color: 0x2a2a2a }));
-  const lineMat = getMat('line', () => new THREE.MeshLambertMaterial({ color: 0xffffff }));
-  const roadHW = ROAD_W * 1.5; // yarı genişlik (çift şerit)
-
-  const size = CITY_GRID * BLOCK;
-  const half = size / 2;
-
-  // Yatay yollar
-  for (let row = 0; row <= CITY_GRID; row++) {
-    const z = -half + row * BLOCK;
-    addRoadSegment(-half, z, half, z, roadHW * 2, mat, lineMat);
-    roadSegments.push({ x1: -half, z1: z, x2: half, z2: z, w: roadHW });
-  }
-  // Dikey yollar
-  for (let col = 0; col <= CITY_GRID; col++) {
-    const x = -half + col * BLOCK;
-    addRoadSegment(x, -half, x, half, roadHW * 2, mat, lineMat);
-    roadSegments.push({ x1: x, z1: -half, x2: x, z2: half, w: roadHW });
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return defaultSettings();
+    return { ...defaultSettings(), ...JSON.parse(raw) };
+  } catch {
+    return defaultSettings();
   }
 }
 
-function addRoadSegment(x1, z1, x2, z2, width, mat, lineMat) {
-  const dx = x2 - x1, dz = z2 - z1;
-  const len = Math.sqrt(dx*dx + dz*dz);
-  const cx = (x1+x2)/2, cz = (z1+z2)/2;
-  const angle = Math.atan2(dx, dz);
-
-  // Yol yüzeyi
-  const geo = new THREE.PlaneGeometry(width, len);
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.rotation.x = -Math.PI/2;
-  mesh.rotation.z = -angle;
-  mesh.position.set(cx, 0.01, cz);
-  mesh.receiveShadow = true;
-  G.scene.add(mesh);
-
-  // Orta çizgi
-  const lineGeo = new THREE.PlaneGeometry(0.2, len);
-  const line = new THREE.Mesh(lineGeo, lineMat);
-  line.rotation.x = -Math.PI/2;
-  line.rotation.z = -angle;
-  line.position.set(cx, 0.02, cz);
-  G.scene.add(line);
-
-  // Kenar çizgileri
-  [-width/2+0.5, width/2-0.5].forEach(offset => {
-    const eGeo = new THREE.PlaneGeometry(0.15, len);
-    const e = new THREE.Mesh(eGeo, lineMat);
-    e.rotation.x = -Math.PI/2;
-    e.rotation.z = -angle;
-    // offset yönü
-    const perpX = -Math.sin(angle) * offset;
-    const perpZ =  Math.cos(angle) * offset; // düzeltme
-    e.position.set(cx + perpX, 0.02, cz + perpZ);
-    G.scene.add(e);
-  });
+function saveSettings(s) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
 }
 
-// Binalar
-function buildBuildings() {
-  const size = CITY_GRID * BLOCK;
-  const half = size / 2;
-  const roadHW = ROAD_W * 1.5;
-  const gap = 2;
+let settings = loadSettings();
 
-  const colors = [0x8d6e63, 0x78909c, 0x546e7a, 0x6d4c41, 0x455a64, 0x4e342e, 0xb0bec5];
-  const mats = colors.map(c => new THREE.MeshLambertMaterial({ color: c }));
-  const winMat = getMat('win', () => new THREE.MeshLambertMaterial({ color: 0x90caf9, emissive: 0x1565c0, emissiveIntensity: 0.2 }));
+// ——————————————————————————————————————————————————————————————
+// DOM
+// ——————————————————————————————————————————————————————————————
 
-  for (let row = 0; row < CITY_GRID; row++) {
-    for (let col = 0; col < CITY_GRID; col++) {
-      const bx = -half + col * BLOCK + roadHW + gap;
-      const bz = -half + row * BLOCK + roadHW + gap;
-      const bw = BLOCK - roadHW*2 - gap*2;
-      const bh = BLOCK - roadHW*2 - gap*2;
+const el = {
+  app: document.getElementById("app"),
+  loading: document.getElementById("screen-loading"),
+  loadingBar: document.getElementById("loading-bar"),
+  loadingStatus: document.getElementById("loading-status"),
+  start: document.getElementById("screen-start"),
+  settings: document.getElementById("screen-settings"),
+  pause: document.getElementById("screen-pause"),
+  hud: document.getElementById("hud"),
+  touchUi: document.getElementById("touch-ui"),
+  minimap: document.getElementById("minimap"),
+  hudSpeed: document.getElementById("hud-speed"),
+  hudFps: document.getElementById("hud-fps"),
+  hudNitro: document.getElementById("hud-nitro-fill"),
+  hudDamage: document.getElementById("hud-damage"),
+  missionText: document.getElementById("mission-text"),
+  btnPlay: document.getElementById("btn-play"),
+  btnOpenSettingsStart: document.getElementById("btn-open-settings-start"),
+  btnSettingsBack: document.getElementById("btn-settings-back"),
+  btnSettingsSave: document.getElementById("btn-settings-save"),
+  btnPause: document.getElementById("btn-pause"),
+  btnCamera: document.getElementById("btn-camera"),
+  btnReset: document.getElementById("btn-reset"),
+  btnResume: document.getElementById("btn-resume"),
+  btnSettingsPause: document.getElementById("btn-settings-pause"),
+  setQuality: document.getElementById("set-quality"),
+  setMobile: document.getElementById("set-mobile-mode"),
+  setSsao: document.getElementById("set-ssao"),
+  joystickZone: document.getElementById("joystick-zone"),
+  joystickKnob: document.getElementById("joystick-knob")
+};
 
-      if (bw < 4 || bh < 4) continue;
+const mapCtx = el.minimap.getContext("2d");
 
-      // Her bloğu 1-4 binaya böl
-      const splits = Math.floor(Math.random()*2)+1;
-      const sw = bw / splits;
+// ——————————————————————————————————————————————————————————————
+// Sabitler
+// ——————————————————————————————————————————————————————————————
 
-      for (let s = 0; s < splits; s++) {
-        const px = bx + s*sw + sw/2 - bw/2;
-        const height = 8 + Math.random()*40;
-        const matIdx = Math.floor(Math.random()*mats.length);
+const WORLD_SIZE = 280;
+const FIXED_DT = 1 / 60;
+const MAX_SPEED = 68;
+const SPAWN = new THREE.Vector3(0, 0.2, -35);
 
-        const geo = new THREE.BoxGeometry(sw-1, height, bh-1);
-        const mesh = new THREE.Mesh(geo, mats[matIdx]);
-        mesh.position.set(px + half - CITY_GRID*BLOCK/2 + roadHW/2, height/2, bz + bh/2 - half + roadHW/2);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        G.scene.add(mesh);
+/** 10 sokak parçası — küçük şehir ızgarası (yatay + dikey) */
+const STREETS = [
+  { x: 0, z: -100, w: 300, d: 14 },
+  { x: 0, z: -50, w: 300, d: 14 },
+  { x: 0, z: 0, w: 300, d: 18 },
+  { x: 0, z: 50, w: 300, d: 14 },
+  { x: 0, z: 100, w: 300, d: 14 },
+  { x: -110, z: 0, w: 14, d: 260 },
+  { x: -55, z: 0, w: 14, d: 260 },
+  { x: 0, z: 0, w: 14, d: 300 },
+  { x: 55, z: 0, w: 14, d: 260 },
+  { x: 110, z: 0, w: 14, d: 260 }
+];
 
-        // Pencereler (basit quad'lar - InstancedMesh yerine küçük kare)
-        if (height > 10) {
-          const wCount = Math.floor(height / 3);
-          const wGeo = new THREE.PlaneGeometry(0.8, 0.6);
-          const wMesh = new THREE.InstancedMesh(wGeo, winMat, wCount*2);
-          wMesh.castShadow = false;
-          let idx = 0;
-          const dummy = new THREE.Object3D();
-          for (let wi = 0; wi < wCount; wi++) {
-            const wy = 2 + wi * 3;
-            [[-sw/2, 0], [0, -bh/2]].forEach(([ox, oz], fi) => {
-              if (idx < wCount*2) {
-                dummy.position.set(
-                  px + half - CITY_GRID*BLOCK/2 + roadHW/2 + (fi===0 ? ox : 0),
-                  wy,
-                  bz + bh/2 - half + roadHW/2 + (fi===1 ? oz : 0)
-                );
-                dummy.rotation.y = fi === 0 ? 0 : Math.PI/2;
-                dummy.updateMatrix();
-                wMesh.setMatrixAt(idx++, dummy.matrix);
-              }
-            });
-          }
-          wMesh.instanceMatrix.needsUpdate = true;
-          G.scene.add(wMesh);
-        }
-      }
+// ——————————————————————————————————————————————————————————————
+// Üçgen / renderer / composer
+// ——————————————————————————————————————————————————————————————
+
+const renderer = new THREE.WebGLRenderer({
+  antialias: !(settings.mobileMode || UA_MOBILE),
+  powerPreference: "high-performance"
+});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(qualityPixelRatio());
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMappingExposure = 1.12;
+el.app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87b4e8);
+scene.fog = new THREE.Fog(0x9ecfff, 55, qualityFogFar());
+
+const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.12, 950);
+camera.position.copy(SPAWN).add(new THREE.Vector3(0, 5, 12));
+
+const composer = new EffectComposer(renderer);
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+
+let ssaoPass = null;
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  bloomStrength(),
+  0.42,
+  0.88
+);
+composer.addPass(bloomPass);
+composer.addPass(new OutputPass());
+composer.setSize(window.innerWidth, window.innerHeight);
+
+const clock = new THREE.Clock();
+
+// ——————————————————————————————————————————————————————————————
+// Kalite yardımcıları
+// ——————————————————————————————————————————————————————————————
+
+function qualityPixelRatio() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const m = settings.mobileMode ? 0.75 : 1;
+  if (settings.quality === "low") return Math.min(dpr * 0.85 * m, 1.15);
+  if (settings.quality === "medium") return Math.min(dpr * m, IS_TOUCH ? 1.25 : 1.45);
+  return Math.min(dpr * 1.05 * m, IS_TOUCH ? 1.35 : 1.75);
+}
+
+function qualityFogFar() {
+  if (settings.mobileMode) return 220 + (settings.quality === "high" ? 40 : 0);
+  if (settings.quality === "low") return 200;
+  if (settings.quality === "medium") return 320;
+  return 380;
+}
+
+function bloomStrength() {
+  const base = settings.quality === "high" ? 0.42 : settings.quality === "medium" ? 0.32 : 0.22;
+  return settings.mobileMode ? base * 0.65 : base;
+}
+
+function shadowMapSize() {
+  if (settings.mobileMode || settings.quality === "low") return 1024;
+  return 2048;
+}
+
+function rebuildPostChain() {
+  while (composer.passes.length) composer.removePass(composer.passes[0]);
+  composer.addPass(renderPass);
+  if (ssaoPass) {
+    try {
+      ssaoPass.dispose();
+    } catch {
+      /* eski sürümlerde yok */
     }
+    ssaoPass = null;
+  }
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const useSsao =
+    settings.quality === "high" &&
+    settings.ssao &&
+    !settings.mobileMode;
+  if (useSsao) {
+    ssaoPass = new SSAOPass(scene, camera, w, h);
+    ssaoPass.kernelRadius = 8;
+    ssaoPass.minDistance = 0.02;
+    ssaoPass.maxDistance = 0.12;
+    ssaoPass.output = SSAOPass.OUTPUT.Default;
+    composer.addPass(ssaoPass);
+  }
+  bloomPass.resolution.set(w, h);
+  bloomPass.strength = bloomStrength();
+  composer.addPass(bloomPass);
+  composer.addPass(new OutputPass());
+  composer.setSize(w, h);
+}
+
+// ——————————————————————————————————————————————————————————————
+// Işıklar (gündüz + yumuşak gölgeler)
+// ——————————————————————————————————————————————————————————————
+
+const hemi = new THREE.HemisphereLight(0xb8dcff, 0x3a4a2a, 0.82);
+scene.add(hemi);
+
+const sun = new THREE.DirectionalLight(0xfff3dd, 1.28);
+sun.position.set(-120, 180, 60);
+sun.castShadow = true;
+sun.shadow.bias = -0.00025;
+sun.shadow.normalBias = 0.02;
+function applyShadowCamera() {
+  const s = shadowMapSize();
+  sun.shadow.mapSize.set(s, s);
+  const b = 220;
+  sun.shadow.camera.left = -b;
+  sun.shadow.camera.right = b;
+  sun.shadow.camera.top = b;
+  sun.shadow.camera.bottom = -b;
+  sun.shadow.camera.near = 20;
+  sun.shadow.camera.far = 520;
+}
+applyShadowCamera();
+scene.add(sun);
+
+// Ambiyans: HDR benzeri — ACES + hafif bloom (yukarıda)
+
+// ——————————————————————————————————————————————————————————————
+// Harita: zemin, yollar, çizgiler, kavşaklar
+// ——————————————————————————————————————————————————————————————
+
+const grassMat = new THREE.MeshStandardMaterial({
+  color: 0x3f5a3a,
+  roughness: 1,
+  metalness: 0
+});
+const grass = new THREE.Mesh(new THREE.PlaneGeometry(720, 720), grassMat);
+grass.rotation.x = -Math.PI / 2;
+grass.position.y = 0;
+grass.receiveShadow = true;
+scene.add(grass);
+
+const roadMat = new THREE.MeshStandardMaterial({
+  color: 0x1e232c,
+  roughness: 0.92,
+  metalness: 0.05
+});
+const roadEdgeMat = new THREE.MeshStandardMaterial({
+  color: 0x2a313d,
+  roughness: 0.9,
+  metalness: 0.03
+});
+
+/** Basit dikdörtgen yol (düşük poligon) */
+function addRoad(rect) {
+  const { x, z, w, d } = rect;
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(w, d), roadMat);
+  road.rotation.x = -Math.PI / 2;
+  road.position.set(x, 0.02, z);
+  road.receiveShadow = true;
+  scene.add(road);
+
+  if (w > d) {
+    const stripe = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.04, d * 0.92), roadEdgeMat);
+    stripe.rotation.x = -Math.PI / 2;
+    stripe.position.set(x, 0.025, z);
+    scene.add(stripe);
+    // Kesik çizgi efekti — çok segment yerine tek şerit (performans)
+  } else {
+    const stripe = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.92, d * 0.04), roadEdgeMat);
+    stripe.rotation.x = -Math.PI / 2;
+    stripe.position.set(x, 0.025, z);
+    scene.add(stripe);
   }
 }
 
-// Ağaçlar (InstancedMesh ile optimize)
-function buildTrees() {
-  const trunkMat = getMat('trunk', () => new THREE.MeshLambertMaterial({ color: 0x5d4037 }));
-  const leafMat  = getMat('leaf',  () => new THREE.MeshLambertMaterial({ color: 0x2e7d32 }));
-  const trunkGeo = new THREE.CylinderGeometry(0.2, 0.3, 2, 5);
-  const leafGeo  = new THREE.SphereGeometry(1.8, 6, 5);
+STREETS.forEach(addRoad);
 
-  const count = 80;
-  const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, count);
-  const leaves = new THREE.InstancedMesh(leafGeo, leafMat, count);
-  trunks.castShadow = true; leaves.castShadow = true;
+// ——————————————————————————————————————————————————————————————
+// Instancing: binalar (tek birim kutu — InstancedMesh tek geometri kuralı)
+// ——————————————————————————————————————————————————————————————
 
-  const dummy = new THREE.Object3D();
-  const size = CITY_GRID * BLOCK;
-  const half = size / 2;
+const buildingUnit = new THREE.BoxGeometry(1, 1, 1);
+const buildingMat = new THREE.MeshStandardMaterial({
+  color: 0x8a96a8,
+  roughness: 0.78,
+  metalness: 0.14
+});
+const dummy = new THREE.Object3D();
+/** @type {{ x: number, z: number, halfW: number, halfD: number, sx: number, sy: number, sz: number, yaw: number }[]} */
+const buildingData = [];
+const BUILD_COUNT = 140;
+const instBuildings = new THREE.InstancedMesh(buildingUnit, buildingMat, BUILD_COUNT);
+instBuildings.castShadow = true;
+instBuildings.receiveShadow = true;
+scene.add(instBuildings);
 
-  for (let i = 0; i < count; i++) {
-    // Sadece kaldırım alanlarına yerleştir
-    const col = Math.floor(Math.random() * (CITY_GRID+1));
-    const t   = Math.random() * size;
-    const roadHW = ROAD_W * 1.5 + 1;
-
-    let tx, tz;
-    if (Math.random() < 0.5) {
-      tx = -half + col * BLOCK + (Math.random() < 0.5 ? -roadHW : roadHW);
-      tz = -half + t;
-    } else {
-      tz = -half + col * BLOCK + (Math.random() < 0.5 ? -roadHW : roadHW);
-      tx = -half + t;
-    }
-
-    dummy.position.set(tx, 1, tz);
-    dummy.rotation.y = Math.random() * Math.PI * 2;
-    dummy.scale.setScalar(0.8 + Math.random() * 0.6);
+function placeBuildings() {
+  const rng = (s) => {
+    const x = Math.sin(s * 12.9898) * 43758.5453;
+    return x - Math.floor(x);
+  };
+  let bIdx = 0;
+  for (let i = 0; i < 220 && bIdx < BUILD_COUNT; i += 1) {
+    const t = i + 0.37;
+    const side = rng(t) > 0.5 ? 1 : -1;
+    const along = (rng(t + 1) - 0.5) * 240;
+    const x = side * (86 + rng(t + 3) * 40);
+    const z = along;
+    if (Math.abs(x) < 24 && Math.abs(z) < 24) continue;
+    const w = 7 + rng(t + 4) * 5;
+    const h = 14 + rng(t + 5) * 22;
+    const d = 7 + rng(t + 6) * 5;
+    const yaw = (rng(t + 7) - 0.5) * 0.12;
+    dummy.position.set(x, h * 0.5, z);
+    dummy.rotation.set(0, yaw, 0);
+    dummy.scale.set(w, h, d);
     dummy.updateMatrix();
-    trunks.setMatrixAt(i, dummy.matrix);
-
-    dummy.position.y = 3.2;
-    dummy.scale.setScalar(dummy.scale.x);
-    dummy.updateMatrix();
-    leaves.setMatrixAt(i, dummy.matrix);
+    instBuildings.setMatrixAt(bIdx, dummy.matrix);
+    buildingData.push({
+      x,
+      z,
+      halfW: w * 0.5 + 0.4,
+      halfD: d * 0.5 + 0.4,
+      sx: w,
+      sy: h,
+      sz: d,
+      yaw
+    });
+    bIdx += 1;
   }
-
-  trunks.instanceMatrix.needsUpdate = true;
-  leaves.instanceMatrix.needsUpdate = true;
-  G.scene.add(trunks); G.scene.add(leaves);
+  instBuildings.count = bIdx;
+  instBuildings.instanceMatrix.needsUpdate = true;
 }
+placeBuildings();
 
-// Trafik lambaları
+// ——————————————————————————————————————————————————————————————
+// Instancing: ağaç (silindir + kon birleşik geometri)
+// ——————————————————————————————————————————————————————————————
+
+const trunkG = new THREE.CylinderGeometry(0.35, 0.5, 2.2, 5);
+trunkG.translate(0, 1.1, 0);
+const crownG = new THREE.ConeGeometry(2.1, 3.2, 6);
+crownG.translate(0, 3.2, 0);
+const treeGeo = mergeGeometries([trunkG, crownG]);
+const treeMat = new THREE.MeshStandardMaterial({ color: 0x4a8c4a, roughness: 0.9 });
+const TREE_COUNT = 200;
+const instTrees = new THREE.InstancedMesh(treeGeo, treeMat, TREE_COUNT);
+instTrees.castShadow = true;
+instTrees.receiveShadow = true;
+scene.add(instTrees);
+
+/** Her örnek için konum + dönüş (LOD güncellenirken aynı kalır) */
+const treeData = [];
+(() => {
+  let k = 0;
+  const rnd = (n) => ((n * 9301 + 49297) % 233280) / 233280;
+  for (let i = 0; i < TREE_COUNT; i += 1) {
+    const u = rnd(i + 1);
+    const v = rnd(i + 2);
+    const x = (u - 0.5) * 640;
+    const z = (v - 0.5) * 640;
+    if (isOnRoad(x, z)) continue;
+    if (Math.hypot(x, z) < 24) continue;
+    const rot = rnd(i + 3) * Math.PI * 2;
+    const sc = 0.85 + rnd(i + 4) * 0.35;
+    dummy.position.set(x, 0, z);
+    dummy.rotation.y = rot;
+    dummy.scale.setScalar(sc);
+    dummy.updateMatrix();
+    instTrees.setMatrixAt(k, dummy.matrix);
+    treeData.push({ x, z, rot, sc });
+    k += 1;
+  }
+  instTrees.count = k;
+  instTrees.instanceMatrix.needsUpdate = true;
+})();
+
+// ——————————————————————————————————————————————————————————————
+// Park halindeki araçlar (instance)
+// ——————————————————————————————————————————————————————————————
+
+const parkedGeo = new THREE.BoxGeometry(2, 0.9, 4.2);
+const parkedMat = new THREE.MeshStandardMaterial({
+  color: 0x6688aa,
+  roughness: 0.55,
+  metalness: 0.35
+});
+const PARKED_COUNT = 72;
+const instParked = new THREE.InstancedMesh(parkedGeo, parkedMat, PARKED_COUNT);
+instParked.castShadow = true;
+instParked.receiveShadow = true;
+scene.add(instParked);
+
+const parkedBodies = [];
+(() => {
+  let k = 0;
+  const rnd = (n) => ((n * 8121 + 13411) % 99991) / 99991;
+  for (let i = 0; i < PARKED_COUNT; i += 1) {
+    const side = rnd(i) > 0.5 ? 1 : -1;
+    const z = (rnd(i + 1) - 0.5) * 200;
+    const x = side * (22 + rnd(i + 2) * 80);
+    if (!isOnRoad(x, z)) continue;
+    dummy.position.set(x, 0.45, z);
+    dummy.rotation.y = (rnd(i + 3) * 0.2 - 0.1) * (side > 0 ? 1 : -1);
+    dummy.scale.set(1, 1, 1);
+    dummy.updateMatrix();
+    instParked.setMatrixAt(k, dummy.matrix);
+    parkedBodies.push({
+      x,
+      z,
+      r: 2.4,
+      yaw: dummy.rotation.y
+    });
+    k += 1;
+  }
+  instParked.count = k;
+  instParked.instanceMatrix.needsUpdate = true;
+})();
+
+// ——————————————————————————————————————————————————————————————
+// Trafik ışıkları
+// ——————————————————————————————————————————————————————————————
+
 const trafficLights = [];
-function buildTrafficLights() {
-  const size = CITY_GRID * BLOCK;
-  const half = size / 2;
-  const roadHW = ROAD_W * 1.5;
-
-  const poleMat = getMat('pole', () => new THREE.MeshLambertMaterial({ color: 0x333333 }));
-  const redMat   = new THREE.MeshLambertMaterial({ color: 0xff1744, emissive: 0xff1744, emissiveIntensity: 1 });
-  const yellowMat= new THREE.MeshLambertMaterial({ color: 0xffd600, emissive: 0xffd600, emissiveIntensity: 0.1 });
-  const greenMat = new THREE.MeshLambertMaterial({ color: 0x00e676, emissive: 0x00e676, emissiveIntensity: 0.1 });
-
-  for (let row = 1; row < CITY_GRID; row++) {
-    for (let col = 1; col < CITY_GRID; col++) {
-      const ix = -half + col * BLOCK;
-      const iz = -half + row * BLOCK;
-      const offsets = [[roadHW, 0], [-roadHW, 0], [0, roadHW], [0, -roadHW]];
-
-      offsets.forEach(([ox, oz]) => {
-        const group = new THREE.Group();
-        // Direk
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 5, 5), poleMat);
-        pole.position.y = 2.5; group.add(pole);
-        // Işıklar
-        const rLight = new THREE.Mesh(new THREE.SphereGeometry(0.18,6,5), redMat.clone());
-        const yLight = new THREE.Mesh(new THREE.SphereGeometry(0.18,6,5), yellowMat.clone());
-        const gLight = new THREE.Mesh(new THREE.SphereGeometry(0.18,6,5), greenMat.clone());
-        rLight.position.set(0, 5.5, 0);
-        yLight.position.set(0, 5.0, 0);
-        gLight.position.set(0, 4.5, 0);
-        group.add(rLight); group.add(yLight); group.add(gLight);
-
-        group.position.set(ix+ox, 0, iz+oz);
-        G.scene.add(group);
-
-        trafficLights.push({
-          group, rLight, yLight, gLight,
-          rMat: rLight.material, yMat: yLight.material, gMat: gLight.material,
-          phase: Math.random() * 12, // rastgele başlangıç fazı
-          state: 'green',
-          isHoriz: Math.abs(ox) > 0,
-        });
-      });
-    }
-  }
-}
-
-function updateTrafficLights(dt) {
-  const T = Date.now() / 1000;
-  trafficLights.forEach(tl => {
-    const t = (T + tl.phase) % 12;
-    let state;
-    if (t < 5)       state = 'green';
-    else if (t < 6.5) state = 'yellow';
-    else              state = 'red';
-
-    if (state !== tl.state) {
-      tl.state = state;
-      tl.rMat.emissiveIntensity = state === 'red'    ? 1 : 0.05;
-      tl.yMat.emissiveIntensity = state === 'yellow' ? 1 : 0.05;
-      tl.gMat.emissiveIntensity = state === 'green'  ? 1 : 0.05;
-    }
-  });
-}
-
-// Park edilmiş araçlar (InstancedMesh)
-function buildParkedCars() {
-  const colors = [0xd32f2f, 0x1565c0, 0x2e7d32, 0x37474f, 0xf57f17, 0x6a1b9a, 0xffffff];
-  const size = CITY_GRID * BLOCK;
-  const half = size / 2;
-  const roadHW = ROAD_W * 1.5;
-
-  colors.forEach((color, ci) => {
-    const mat = new THREE.MeshLambertMaterial({ color });
-    const bodyGeo = new THREE.BoxGeometry(2, 0.8, 4);
-    const roofGeo = new THREE.BoxGeometry(1.6, 0.6, 2.2);
-
-    for (let i = 0; i < 3; i++) {
-      const col = Math.floor(Math.random() * CITY_GRID);
-      const t   = Math.random();
-      const side = Math.random() < 0.5 ? 1 : -1;
-      const isHoriz = Math.random() < 0.5;
-
-      let px, pz, ry;
-      if (isHoriz) {
-        px = -half + col * BLOCK + side * (roadHW + 2.5);
-        pz = -half + t * size;
-        ry = Math.PI / 2;
-      } else {
-        pz = -half + col * BLOCK + side * (roadHW + 2.5);
-        px = -half + t * size;
-        ry = 0;
-      }
-
-      const body = new THREE.Mesh(bodyGeo, mat);
-      body.position.set(px, 0.7, pz);
-      body.rotation.y = ry;
-      body.castShadow = true;
-      G.scene.add(body);
-
-      const roof = new THREE.Mesh(roofGeo, mat);
-      roof.position.set(px, 1.4, pz);
-      roof.rotation.y = ry;
-      G.scene.add(roof);
-    }
-  });
-}
-
-// Tüm şehri bir arada kur
-function buildCity() {
-  buildGround();
-  buildRoads();
-  buildBuildings();
-  buildTrees();
-  buildTrafficLights();
-  buildParkedCars();
-}
-
-// =====================================================================
-// OYUNCU ARACI
-// =====================================================================
-const player = {
-  mesh: null,
-  body: null, // gövde
-  wheels: [],
-  lights: { head: [], brake: [], headOn: false, brakeOn: false },
-
-  // Fizik durumu
-  pos: new THREE.Vector3(5, 0.5, 5),
-  vel: new THREE.Vector3(),
-  heading: 0,     // radyan
-  speed: 0,       // m/s (imzalı)
-  steer: 0,       // anlık direksiyon [-1,1]
-  targetSteer: 0,
-
-  // Sistem durumu
-  nitro: 100,
-  damage: 0,
-  onGround: true,
-  drifting: false,
-  braking: false,
-};
-
-function setupPlayer() {
-  const group = new THREE.Group();
-
-  // Araba gövde materyali
-  const bodyMat = new THREE.MeshPhongMaterial({
-    color: 0xe53935,
-    shininess: 120,
-    specular: 0xffffff,
-  });
-  const darkMat = getMat('dark', () => new THREE.MeshLambertMaterial({ color: 0x111111 }));
-  const glassMat = getMat('glass', () => new THREE.MeshPhongMaterial({
-    color: 0x90caf9, transparent: true, opacity: 0.55, shininess: 200
-  }));
-  const wheelMat = getMat('wheel', () => new THREE.MeshLambertMaterial({ color: 0x1a1a1a }));
-  const rimMat   = getMat('rim',   () => new THREE.MeshPhongMaterial({ color: 0xbdbdbd, shininess: 200 }));
-
-  // Ana gövde
-  const bodyGeo = new THREE.BoxGeometry(2.0, 0.65, 4.4);
-  const body = new THREE.Mesh(bodyGeo, bodyMat);
-  body.position.y = 0.4;
-  body.castShadow = true;
-  group.add(body);
-  player.body = body;
-
-  // Çatı
-  const roofGeo = new THREE.BoxGeometry(1.7, 0.55, 2.2);
-  const roof = new THREE.Mesh(roofGeo, bodyMat);
-  roof.position.set(0, 1.0, 0.2);
-  roof.castShadow = true;
-  group.add(roof);
-
-  // Ön kaput eğimi (trapez benzeri - BoxGeometry ile simüle)
-  const hoodGeo = new THREE.BoxGeometry(1.9, 0.18, 1.1);
-  const hood = new THREE.Mesh(hoodGeo, bodyMat);
-  hood.position.set(0, 0.75, -1.5);
-  hood.rotation.x = 0.18;
-  group.add(hood);
-
-  // Arka bagaj
-  const trunkGeo = new THREE.BoxGeometry(1.9, 0.18, 0.9);
-  const trunk = new THREE.Mesh(trunkGeo, bodyMat);
-  trunk.position.set(0, 0.77, 1.5);
-  trunk.rotation.x = -0.12;
-  group.add(trunk);
-
-  // Cam ön
-  const fGlassGeo = new THREE.PlaneGeometry(1.6, 0.55);
-  const fGlass = new THREE.Mesh(fGlassGeo, glassMat);
-  fGlass.position.set(0, 0.92, -1.08);
-  fGlass.rotation.x = -0.75;
-  group.add(fGlass);
-
-  // Cam arka
-  const rGlassGeo = new THREE.PlaneGeometry(1.55, 0.5);
-  const rGlass = new THREE.Mesh(rGlassGeo, glassMat);
-  rGlass.position.set(0, 0.92, 1.14);
-  rGlass.rotation.x = 0.7;
-  group.add(rGlass);
-
-  // Alt kısım / şasi
-  const chGeo = new THREE.BoxGeometry(1.85, 0.2, 4.0);
-  const chassis = new THREE.Mesh(chGeo, darkMat);
-  chassis.position.y = 0.07;
-  group.add(chassis);
-
-  // Farlar
-  const headlightMat = new THREE.MeshPhongMaterial({ color: 0xfffde7, emissive: 0xffff99, emissiveIntensity: 0 });
-  [[-0.75, 0.45, -2.2],[0.75, 0.45, -2.2]].forEach(([x,y,z]) => {
-    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.18, 0.08), headlightMat.clone());
-    hl.position.set(x,y,z);
-    group.add(hl);
-    player.lights.head.push(hl);
-  });
-
-  // Fren lambaları (arka)
-  const brakeMat = new THREE.MeshPhongMaterial({ color: 0xff1744, emissive: 0xff0000, emissiveIntensity: 0 });
-  [[-0.75, 0.45, 2.2],[0.75, 0.45, 2.2]].forEach(([x,y,z]) => {
-    const bl = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.18, 0.08), brakeMat.clone());
-    bl.position.set(x,y,z);
-    group.add(bl);
-    player.lights.brake.push(bl);
-  });
-
-  // Tekerler
-  const wheelPositions = [
-    [-0.92, 0, -1.4, true],
-    [ 0.92, 0, -1.4, true],
-    [-0.92, 0,  1.3, false],
-    [ 0.92, 0,  1.3, false],
-  ];
-  wheelPositions.forEach(([x,y,z,isFront]) => {
-    const wGrp = new THREE.Group();
-    const tire = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.32, 0.32, 0.22, 12),
-      wheelMat
-    );
-    tire.rotation.z = Math.PI/2;
-    wGrp.add(tire);
-
-    // Jant
-    const rim = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.20, 0.20, 0.23, 6),
-      rimMat
-    );
-    rim.rotation.z = Math.PI/2;
-    wGrp.add(rim);
-
-    wGrp.position.set(x, 0.32, z);
-    wGrp.userData.isFront = isFront;
-    group.add(wGrp);
-    player.wheels.push(wGrp);
-  });
-
-  // Egzoz
-  const exhaust = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.06, 0.05, 0.4, 6),
-    darkMat
+function makeTrafficLight(x, z) {
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.16, 0.2, 6.5, 6),
+    new THREE.MeshStandardMaterial({ color: 0x4a515a })
   );
-  exhaust.position.set(0.6, 0.12, 2.3);
-  exhaust.rotation.x = Math.PI/2;
-  group.add(exhaust);
-
-  group.position.copy(player.pos);
-  G.scene.add(group);
-  player.mesh = group;
-
-  // Araca bağlı far spot ışıkları
-  if (G.quality !== 'low') {
-    const hl1 = new THREE.SpotLight(0xfffde7, 0, 60, 0.45, 0.3);
-    hl1.position.set(-0.75, 0.5, -2.2);
-    hl1.target.position.set(-2, -0.5, -20);
-    group.add(hl1); group.add(hl1.target);
-    const hl2 = new THREE.SpotLight(0xfffde7, 0, 60, 0.45, 0.3);
-    hl2.position.set(0.75, 0.5, -2.2);
-    hl2.target.position.set(2, -0.5, -20);
-    group.add(hl2); group.add(hl2.target);
-    player.lights.spots = [hl1, hl2];
-  }
+  pole.position.y = 3.2;
+  pole.castShadow = true;
+  g.add(pole);
+  const box = new THREE.Mesh(
+    new THREE.BoxGeometry(0.7, 1.6, 0.7),
+    new THREE.MeshStandardMaterial({ color: 0x282e36 })
+  );
+  box.position.y = 7;
+  g.add(box);
+  g.position.set(x, 0, z);
+  scene.add(g);
+  trafficLights.push({ group: g, t: Math.random() * 10, phase: Math.random() > 0.5 ? 0 : 1 });
 }
 
-// =====================================================================
-// KAMERA
-// =====================================================================
-const CAM = {
-  mode: 0, // 0=dış, 1=iç
-  target: new THREE.Vector3(),
-  lerpFactor: 0.1,
-  shakeAmount: 0,
-};
+[[-40, 0], [40, 0], [0, 40], [0, -40], [-90, 50], [90, -50]].forEach(([x, z]) =>
+  makeTrafficLight(x, z)
+);
 
-function setupCamera() {
-  G.camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.2, 800);
-  G.camera.position.set(0, 6, 14);
-  G.scene.add(G.camera);
-}
+// ——————————————————————————————————————————————————————————————
+// Trafik AI (basit kutular)
+// ——————————————————————————————————————————————————————————————
 
-function updateCamera(dt) {
-  if (!player.mesh) return;
-  const mesh = player.mesh;
-  const speed = Math.abs(player.speed);
-
-  if (CAM.mode === 0) {
-    // Dış kamera
-    const dist = 10 + speed * 0.08;
-    const height = 4.5 + speed * 0.02;
-    const fwd = new THREE.Vector3(-Math.sin(player.heading), 0, -Math.cos(player.heading));
-    const camTarget = mesh.position.clone()
-      .add(fwd.clone().multiplyScalar(-dist))
-      .add(new THREE.Vector3(0, height, 0));
-
-    G.camera.position.lerp(camTarget, 0.08);
-    CAM.target.lerp(mesh.position.clone().add(new THREE.Vector3(0, 1, 0)), 0.12);
-    G.camera.lookAt(CAM.target);
-  } else {
-    // İç kamera
-    const fwd = new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading));
-    const camPos = mesh.position.clone()
-      .add(new THREE.Vector3(0, 1.1, 0))
-      .add(fwd.clone().multiplyScalar(-0.3));
-    G.camera.position.lerp(camPos, 0.25);
-    const lookTarget = mesh.position.clone()
-      .add(new THREE.Vector3(0, 0.8, 0))
-      .add(fwd.clone().multiplyScalar(20));
-    G.camera.lookAt(lookTarget);
+const trafficMeshes = [];
+const trafficData = [];
+function spawnTraffic(n) {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xc2c7d4, roughness: 0.6, metalness: 0.2 });
+  for (let i = 0; i < n; i += 1) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(2, 1.1, 4), mat);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    const axis = i % 2 === 0 ? "x" : "z";
+    const lane = axis === "x" ? (i % 4 < 2 ? 28 : -28) : (i % 4 < 2 ? 35 : -35);
+    const dir = i % 2 === 0 ? 1 : -1;
+    if (axis === "x") {
+      m.position.set(-200 * dir, 0.55, lane);
+      m.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+    } else {
+      m.position.set(lane, 0.55, -200 * dir);
+      m.rotation.y = dir > 0 ? 0 : Math.PI;
+    }
+    scene.add(m);
+    trafficMeshes.push(m);
+    trafficData.push({
+      mesh: m,
+      axis,
+      dir,
+      lane,
+      speed: 12 + (i % 5) * 2,
+      stopT: 0
+    });
   }
-
-  // Kamera sarsıntısı (çarpma)
-  if (CAM.shakeAmount > 0) {
-    G.camera.position.x += (Math.random()-0.5) * CAM.shakeAmount;
-    G.camera.position.y += (Math.random()-0.5) * CAM.shakeAmount;
-    CAM.shakeAmount = Math.max(0, CAM.shakeAmount - dt*8);
-  }
-
-  // FOV hız efekti
-  const targetFov = 70 + speed * 0.25;
-  G.camera.fov += (targetFov - G.camera.fov) * 0.05;
-  G.camera.updateProjectionMatrix();
 }
+spawnTraffic(settings.mobileMode ? 10 : 14);
 
-// =====================================================================
-// OYUNCU FİZİĞİ GÜNCELLEMESİ
-// =====================================================================
-const keys = {};
-const CONTROLS = {
-  forward:    ['w','arrowup'],
-  back:       ['s','arrowdown'],
-  left:       ['a','arrowleft'],
-  right:      ['d','arrowright'],
-  brake:      [' '],
-  nitro:      ['n'],
-  camToggle:  ['c'],
-  lights:     ['h'],
-  reset:      ['r'],
-  pause:      ['escape','p'],
-};
+// ——————————————————————————————————————————————————————————————
+// Oyuncu arabası — düşük poli, parlak gövde
+// ——————————————————————————————————————————————————————————————
 
-// Joystick durumu
-const joystick = { x: 0, y: 0, active: false };
-
-function setupControls() {
-  window.addEventListener('keydown', e => {
-    keys[e.key.toLowerCase()] = true;
-    const k = e.key.toLowerCase();
-    if (CONTROLS.camToggle.includes(k)) toggleCamera();
-    if (CONTROLS.lights.includes(k)) toggleLights();
-    if (CONTROLS.reset.includes(k)) resetCar();
-    if (CONTROLS.pause.includes(k)) togglePause();
+function createPlayerCar() {
+  const g = new THREE.Group();
+  const paint = new THREE.MeshStandardMaterial({
+    color: 0xff3355,
+    roughness: 0.35,
+    metalness: 0.55
   });
-  window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2.15, 0.72, 4.25), paint);
+  body.position.y = 1.16;
+  body.castShadow = true;
+  g.add(body);
+
+  const cabinMat = new THREE.MeshStandardMaterial({
+    color: 0x0c1a28,
+    roughness: 0.25,
+    metalness: 0.65
+  });
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.6, 1.85), cabinMat);
+  cabin.position.set(0, 1.64, -0.12);
+  cabin.castShadow = true;
+  g.add(cabin);
+
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.96 });
+  const wGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 10);
+  wGeo.rotateZ(Math.PI / 2);
+  const positions = [
+    [-0.95, 0.74, 1.38],
+    [0.95, 0.74, 1.38],
+    [-0.95, 0.74, -1.38],
+    [0.95, 0.74, -1.38]
+  ];
+  const wheels = positions.map(([x, y, z], wi) => {
+    const w = new THREE.Mesh(wGeo, wheelMat);
+    w.position.set(x, y, z);
+    w.castShadow = true;
+    g.add(w);
+    return { mesh: w, front: wi < 2 };
+  });
+
+  const brakeMat = new THREE.MeshStandardMaterial({
+    color: 0xff2222,
+    emissive: 0x220000
+  });
+  const bGeo = new THREE.BoxGeometry(0.22, 0.08, 0.28);
+  const bl = new THREE.Mesh(bGeo, brakeMat);
+  const br = new THREE.Mesh(bGeo, brakeMat);
+  bl.position.set(-0.64, 1.12, -2.1);
+  br.position.set(0.64, 1.12, -2.1);
+  g.add(bl, br);
+
+  const spotL = new THREE.SpotLight(0xdef6ff, 0, 42, Math.PI / 6, 0.55, 1.4);
+  const spotR = new THREE.SpotLight(0xdef6ff, 0, 42, Math.PI / 6, 0.55, 1.4);
+  spotL.position.set(-0.62, 1.1, 2.05);
+  spotR.position.set(0.62, 1.1, 2.05);
+  spotL.target.position.set(-0.62, 0.2, 18);
+  spotR.target.position.set(0.62, 0.2, 18);
+  g.add(spotL, spotR, spotL.target, spotR.target);
+  spotL.castShadow = false;
+  spotR.castShadow = false;
+
+  g.position.copy(SPAWN);
+  scene.add(g);
+
+  return {
+    root: g,
+    body,
+    paint,
+    wheels,
+    brakeMat,
+    brakeL: bl,
+    brakeR: br,
+    headlights: [spotL, spotR],
+    vel: new THREE.Vector3(),
+    speed: 0,
+    yaw: 0,
+    steer: 0,
+    nitro: 1,
+    damage: 0,
+    travel: 0,
+    driftTime: 0
+  };
 }
 
-function isKey(action) {
-  return CONTROLS[action].some(k => keys[k]);
+const player = createPlayerCar();
+
+// ——————————————————————————————————————————————————————————————
+// Fren izi + duman
+// ——————————————————————————————————————————————————————————————
+
+const SKID_MAX = 1400;
+const skidPos = new Float32Array(SKID_MAX * 3);
+const skidGeo = new THREE.BufferGeometry();
+skidGeo.setAttribute("position", new THREE.BufferAttribute(skidPos, 3));
+let skidPtr = 0;
+const skidLine = new THREE.LineSegments(
+  skidGeo,
+  new THREE.LineBasicMaterial({ color: 0x151515, transparent: true, opacity: 0.78 })
+);
+scene.add(skidLine);
+
+const SMOKE_N = settings.mobileMode ? 70 : 110;
+const smokeGeo = new THREE.BufferGeometry();
+const smokePos = new Float32Array(SMOKE_N * 3);
+const smokeLife = new Float32Array(SMOKE_N);
+smokeGeo.setAttribute("position", new THREE.BufferAttribute(smokePos, 3));
+const smokePts = new THREE.Points(
+  smokeGeo,
+  new THREE.PointsMaterial({
+    size: settings.mobileMode ? 0.5 : 0.62,
+    color: 0xd5dae0,
+    transparent: true,
+    opacity: 0.42,
+    depthWrite: false
+  })
+);
+scene.add(smokePts);
+
+// ——————————————————————————————————————————————————————————————
+// Kamera modları
+// ——————————————————————————————————————————————————————————————
+
+const camModes = [
+  { offset: new THREE.Vector3(0, 4.8, -9.2), look: new THREE.Vector3(0, 1.2, 6), fov: 65 },
+  { offset: new THREE.Vector3(0, 1.38, 0.35), look: new THREE.Vector3(0, 1.25, 10), fov: 72 }
+];
+let camIndex = 0;
+
+// ——————————————————————————————————————————————————————————————
+// Ses (Web Audio — motor + nitro)
+// ——————————————————————————————————————————————————————————————
+
+const listener = new THREE.AudioListener();
+camera.add(listener);
+const ctx = listener.context;
+const master = ctx.createGain();
+master.gain.value = 0.001;
+master.connect(ctx.destination);
+
+const engineOsc = ctx.createOscillator();
+engineOsc.type = "sawtooth";
+engineOsc.frequency.value = 70;
+const engineGain = ctx.createGain();
+engineGain.gain.value = 0;
+engineOsc.connect(engineGain);
+engineGain.connect(master);
+engineOsc.start();
+
+const nitroGain = ctx.createGain();
+nitroGain.gain.value = 0;
+const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+const ch = buf.getChannelData(0);
+for (let i = 0; i < ch.length; i += 1) ch[i] = (Math.random() * 2 - 1) * 0.35;
+const nitroBuf = ctx.createBufferSource();
+nitroBuf.buffer = buf;
+nitroBuf.loop = true;
+const hp = ctx.createBiquadFilter();
+hp.type = "highpass";
+hp.frequency.value = 800;
+nitroBuf.connect(hp);
+hp.connect(nitroGain);
+nitroGain.connect(master);
+nitroBuf.start();
+
+async function unlockAudio() {
+  if (ctx.state !== "running") await ctx.resume();
+  master.gain.setTargetAtTime(0.7, ctx.currentTime, 0.05);
 }
 
-function updatePlayer(dt) {
-  if (!player.mesh) return;
-  const p = CAR_PARAMS;
+// ——————————————————————————————————————————————————————————————
+// Girdi: klavye + sanal joystick + pedallar
+// ——————————————————————————————————————————————————————————————
 
-  // Giriş topla
-  let throttle = 0, brake = false, handbrake = false, nitroOn = false;
+const keys = {
+  KeyW: false,
+  KeyA: false,
+  KeyS: false,
+  KeyD: false,
+  Space: false,
+  ShiftLeft: false
+};
 
-  if (isKey('forward') || joystick.y < -0.3)  throttle =  1;
-  if (isKey('back')    || joystick.y >  0.3)  throttle = -0.6;
-  if (isKey('brake'))   handbrake = true;
-  if (isKey('nitro'))   nitroOn   = true;
+let steerTouch = 0;
+let throttleTouch = 0;
 
-  let steerInput = 0;
-  if (isKey('left')  || joystick.x < -0.2) steerInput = -1;
-  if (isKey('right') || joystick.x >  0.2) steerInput =  1;
-  if (joystick.active) {
-    steerInput = joystick.x;
-    throttle   = Math.abs(joystick.y) > 0.2 ? -joystick.y : throttle;
+window.addEventListener(
+  "keydown",
+  (e) => {
+    if (e.repeat) return;
+    if (e.code === "KeyP") togglePause();
+    if (e.code === "KeyC") cycleCamera();
+    if (e.code === "KeyR") resetCar(true);
+    if (keys[e.code] !== undefined) keys[e.code] = true;
+  },
+  { passive: true }
+);
+window.addEventListener(
+  "keyup",
+  (e) => {
+    if (keys[e.code] !== undefined) keys[e.code] = false;
+  },
+  { passive: true }
+);
+
+function bindPedals() {
+  document.querySelectorAll(".pedal").forEach((btn) => {
+    const code = btn.dataset.code;
+    const down = (ev) => {
+      ev.preventDefault();
+      if (keys[code] !== undefined) keys[code] = true;
+    };
+    const up = (ev) => {
+      ev.preventDefault();
+      if (keys[code] !== undefined) keys[code] = false;
+    };
+    btn.addEventListener("pointerdown", down);
+    btn.addEventListener("pointerup", up);
+    btn.addEventListener("pointercancel", up);
+    btn.addEventListener("pointerleave", up);
+  });
+}
+bindPedals();
+
+/** Sanal joystick */
+const joy = { active: false, cx: 0, cy: 0, maxR: 52 };
+function joystickSetup() {
+  const zone = el.joystickZone;
+  const knob = el.joystickKnob;
+  const rect = () => zone.getBoundingClientRect();
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  const onMove = (clientX, clientY) => {
+    const r = rect();
+    const mx = clientX - r.left - r.width / 2;
+    const my = clientY - r.top - r.height / 2;
+    const dist = Math.hypot(mx, my);
+    const nx = dist > joy.maxR ? (mx / dist) * joy.maxR : mx;
+    const ny = dist > joy.maxR ? (my / dist) * joy.maxR : my;
+    knob.style.transform = `translate(${nx}px, ${ny}px)`;
+    steerTouch = clamp(nx / joy.maxR, -1, 1);
+    throttleTouch = clamp(-ny / joy.maxR, -1, 1);
+  };
+  const end = () => {
+    joy.active = false;
+    knob.style.transform = "translate(0px, 0px)";
+    steerTouch = 0;
+    throttleTouch = 0;
+  };
+  zone.addEventListener("pointerdown", (e) => {
+    joy.active = true;
+    try {
+      zone.setPointerCapture(e.pointerId);
+    } catch {
+      /* bazı tarayıcılar */
+    }
+    onMove(e.clientX, e.clientY);
+  });
+  zone.addEventListener("pointermove", (e) => {
+    if (!joy.active) return;
+    onMove(e.clientX, e.clientY);
+  });
+  zone.addEventListener("pointerup", end);
+  zone.addEventListener("pointercancel", end);
+}
+
+// ——————————————————————————————————————————————————————————————
+// Oyun durumu
+// ——————————————————————————————————————————————————————————————
+
+let paused = false;
+let running = false;
+let accumulator = 0;
+
+const missions = [
+  { id: 1, text: "400 m ilerle (serbest sürüş)", type: "dist", target: 400, done: false },
+  { id: 2, text: "Kavşaktaki noktaya ulaş", type: "cp", pos: new THREE.Vector3(-40, 0, 0), r: 16, done: false },
+  { id: 3, text: "Nitro ile 4 saniye hızlan", type: "nitro", target: 4, done: false }
+];
+let missionIndex = 0;
+/** Nitro görevi: toplam nitro kullanım süresi (sn) */
+let nitroMissionAccum = 0;
+
+function currentMission() {
+  return missions[missionIndex] || null;
+}
+
+function advanceMission() {
+  const m = missions[missionIndex];
+  if (!m) return;
+  m.done = true;
+  missionIndex += 1;
+  const next = currentMission();
+  el.missionText.textContent = next ? next.text : "Tüm görevler tamamlandı — şehir senin.";
+}
+
+// ——————————————————————————————————————————————————————————————
+// Yardımcılar: yol testi, trafik ışığı
+// ——————————————————————————————————————————————————————————————
+
+function isOnRoad(x, z) {
+  for (const s of STREETS) {
+    if (Math.abs(x - s.x) <= s.w * 0.5 && Math.abs(z - s.z) <= s.d * 0.5) return true;
   }
+  return false;
+}
 
-  // Mevcut hız değeri
-  const spd = player.speed;
-  const absSpd = Math.abs(spd);
-  const maxSpd = p.maxSpeed;
+function trafficLightState() {
+  const t = performance.now() * 0.001;
+  const cycle = 9;
+  return (t % cycle) / cycle < 0.45;
+}
 
-  // Nitro
-  if (nitroOn && player.nitro > 0) {
-    player.nitro = Math.max(0, player.nitro - p.nitroDrain * dt);
-    if (player.nitro > 0) throttle *= p.nitroMultiplier;
-    document.getElementById('nitro-ind').classList.add('on');
-    document.getElementById('speed-lines').classList.remove('hidden');
-  } else {
-    player.nitro = Math.min(p.nitroMax, player.nitro + p.nitroRegen * dt);
-    document.getElementById('nitro-ind').classList.remove('on');
-    if (absSpd < p.maxSpeed * 0.6)
-      document.getElementById('speed-lines').classList.add('hidden');
+function shouldStopAtLight(pos, axis) {
+  const red = trafficLightState();
+  if (!red) return false;
+  for (const L of trafficLights) {
+    const lx = L.group.position.x;
+    const lz = L.group.position.z;
+    const dx = Math.abs(pos.x - lx);
+    const dz = Math.abs(pos.z - lz);
+    if (dx < 12 && dz < 12) {
+      if (axis === "x" && dz < 6) return Math.abs(pos.x - lx) < 10;
+      if (axis === "z" && dx < 6) return Math.abs(pos.z - lz) < 10;
+    }
   }
+  return false;
+}
 
-  // Hız güncelle
-  if (throttle !== 0 && absSpd < maxSpd) {
-    player.speed += throttle * p.acceleration * dt;
-  } else if (throttle === 0) {
-    // Sürtünme
-    const friction = p.friction * dt;
-    if (absSpd < friction) player.speed = 0;
-    else player.speed -= Math.sign(spd) * friction;
+// ——————————————————————————————————————————————————————————————
+// LOD / render mesafesi — örnekleri sıfır ölçekle (draw culling benzeri)
+// ——————————————————————————————————————————————————————————————
+
+function updateLOD() {
+  const px = player.root.position.x;
+  const pz = player.root.position.z;
+  const treeDist = settings.quality === "low" ? 95 : settings.mobileMode ? 110 : 150;
+  for (let i = 0; i < instTrees.count; i += 1) {
+    const td = treeData[i];
+    const d = Math.hypot(td.x - px, td.z - pz);
+    const show = d < treeDist;
+    dummy.position.set(td.x, 0, td.z);
+    dummy.rotation.y = td.rot;
+    dummy.scale.setScalar(show ? td.sc : 0);
+    dummy.updateMatrix();
+    instTrees.setMatrixAt(i, dummy.matrix);
   }
+  instTrees.instanceMatrix.needsUpdate = true;
 
-  // Fren/el freni
-  if (handbrake && absSpd > 0.2) {
-    const hbf = p.handbrakeForce * dt;
-    if (absSpd < hbf) player.speed = 0;
-    else player.speed -= Math.sign(spd) * hbf;
-    player.drifting = true;
-  } else if (throttle < 0 && spd > 0) {
-    // Geri tuşu + ileri gidiyor = fren
-    brake = true;
-    player.speed -= p.brakeForce * dt;
-    if (player.speed < 0) player.speed = 0;
-  } else {
-    player.drifting = handbrake;
+  const pd = settings.mobileMode ? 75 : 105;
+  for (let i = 0; i < instParked.count; i += 1) {
+    const p = parkedBodies[i];
+    if (!p) continue;
+    const d = Math.hypot(p.x - px, p.z - pz);
+    const show = d < pd;
+    dummy.position.set(p.x, 0.45, p.z);
+    dummy.rotation.y = p.yaw;
+    dummy.scale.setScalar(show ? 1 : 0);
+    dummy.updateMatrix();
+    instParked.setMatrixAt(i, dummy.matrix);
   }
+  instParked.instanceMatrix.needsUpdate = true;
 
-  player.braking = brake || handbrake;
+  const bd = settings.mobileMode ? 120 : 180;
+  for (let i = 0; i < instBuildings.count; i += 1) {
+    const b = buildingData[i];
+    const d = Math.hypot(b.x - px, b.z - pz);
+    const show = d < bd;
+    const hy = show ? b.sy * 0.5 : 0;
+    dummy.position.set(b.x, hy, b.z);
+    dummy.rotation.set(0, b.yaw, 0);
+    dummy.scale.set(show ? b.sx : 0, show ? b.sy : 0, show ? b.sz : 0);
+    dummy.updateMatrix();
+    instBuildings.setMatrixAt(i, dummy.matrix);
+  }
+  instBuildings.instanceMatrix.needsUpdate = true;
+}
 
-  // Direksiyon
-  const steerSensitivity = Math.max(0.2, 1 - absSpd/maxSpd*0.6);
-  player.targetSteer = steerInput * p.maxTurn * steerSensitivity;
-  player.steer += (player.targetSteer - player.steer) * (dt * 8);
+// ——————————————————————————————————————————————————————————————
+// Çarpışma: park + trafik + basit AABB bina
+// ——————————————————————————————————————————————————————————————
 
-  // Yaw (dönüş)
-  if (absSpd > 0.5) {
-    const yawRate = player.steer * p.turnSpeed * Math.sign(spd) * dt;
-    player.heading += yawRate;
+function collideWorld() {
+  const p = player.root.position;
+  const prevSpeed = player.speed;
 
-    // Drift kayması
-    if (player.drifting && absSpd > 5) {
-      player.heading += player.steer * 0.04;
+  for (const pk of parkedBodies) {
+    if (!pk || pk.r < 0.1) continue;
+    const dx = p.x - pk.x;
+    const dz = p.z - pk.z;
+    if (Math.hypot(dx, dz) < pk.r + 1.1) {
+      const push = new THREE.Vector3(dx, 0, dz).normalize().multiplyScalar(0.55);
+      p.add(push);
+      player.speed *= -0.15;
+      applyDamage(0.04 + Math.abs(prevSpeed) * 0.002);
     }
   }
 
-  // Hız vektörünü heading'e göre güncelle
-  const sinH = Math.sin(player.heading);
-  const cosH = Math.cos(player.heading);
+  for (const t of trafficData) {
+    const tp = t.mesh.position;
+    const d = p.distanceTo(tp);
+    if (d < 2.8) {
+      const push = p.clone().sub(tp).normalize().multiplyScalar(0.7);
+      p.add(push);
+      player.speed *= -0.2;
+      t.speed *= 0.4;
+      applyDamage(0.05 + Math.abs(prevSpeed) * 0.003);
+    }
+  }
 
-  // Yan kayma (drift hissi)
-  const lateralDamp = player.drifting ? p.driftFactor : 0.96;
-  const velDir = player.vel.clone().normalize();
-  const fwdDir = new THREE.Vector3(sinH, 0, cosH);
-  const dot = velDir.dot(fwdDir);
+  for (const b of buildingData) {
+    const dx = Math.abs(p.x - b.x);
+    const dz = Math.abs(p.z - b.z);
+    if (dx < b.halfW && dz < b.halfD) {
+      const push = new THREE.Vector3(p.x - b.x, 0, p.z - b.z);
+      if (push.lengthSq() < 0.001) push.set(1, 0, 0);
+      push.normalize().multiplyScalar(0.95);
+      p.add(push);
+      player.speed *= 0.1;
+      applyDamage(0.08);
+    }
+  }
+}
 
-  player.vel.x = player.vel.x * (player.drifting ? 0.92 : 0.85) + sinH * player.speed * 0.15;
-  player.vel.z = player.vel.z * (player.drifting ? 0.92 : 0.85) + cosH * player.speed * 0.15;
+function applyDamage(amount) {
+  player.damage = THREE.MathUtils.clamp(player.damage + amount, 0, 1);
+  const c = new THREE.Color(0xff3355).lerp(new THREE.Color(0x331111), player.damage);
+  player.paint.color.copy(c);
+}
 
-  // Ana hareket
-  player.pos.x += sinH * player.speed * dt;
-  player.pos.z += cosH * player.speed * dt;
+// ——————————————————————————————————————————————————————————————
+// Efektler: iz, duman
+// ——————————————————————————————————————————————————————————————
+
+function addSkid(x, z) {
+  if (skidPtr >= SKID_MAX - 2) skidPtr = 0;
+  skidPos[skidPtr * 3] = x;
+  skidPos[skidPtr * 3 + 1] = 0.03;
+  skidPos[skidPtr * 3 + 2] = z;
+  skidPtr += 1;
+  skidPos[skidPtr * 3] = x + (Math.random() - 0.5) * 0.35;
+  skidPos[skidPtr * 3 + 1] = 0.03;
+  skidPos[skidPtr * 3 + 2] = z + (Math.random() - 0.5) * 0.35;
+  skidPtr += 1;
+  skidGeo.attributes.position.needsUpdate = true;
+}
+
+function emitSmoke() {
+  for (let k = 0; k < 3; k += 1) {
+    let idx = -1;
+    for (let i = 0; i < SMOKE_N; i += 1) {
+      if (smokeLife[i] <= 0) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx < 0) return;
+    smokePos[idx * 3] = player.root.position.x + (Math.random() - 0.5) * 1.2;
+    smokePos[idx * 3 + 1] = 0.45;
+    smokePos[idx * 3 + 2] = player.root.position.z + (Math.random() - 0.5) * 1.2;
+    smokeLife[idx] = 1.2;
+  }
+  smokeGeo.attributes.position.needsUpdate = true;
+}
+
+function updateSmoke(dt) {
+  for (let i = 0; i < SMOKE_N; i += 1) {
+    if (smokeLife[i] <= 0) continue;
+    smokeLife[i] -= dt;
+    smokePos[i * 3 + 1] += dt * 2.2;
+    smokePos[i * 3] += (Math.random() - 0.5) * dt * 1.8;
+    smokePos[i * 3 + 2] += (Math.random() - 0.5) * dt * 1.8;
+    if (smokeLife[i] <= 0) smokePos[i * 3 + 1] = -99;
+  }
+  smokeGeo.attributes.position.needsUpdate = true;
+}
+
+// ——————————————————————————————————————————————————————————————
+// Trafik güncelleme
+// ——————————————————————————————————————————————————————————————
+
+function updateTraffic(dt) {
+  for (const t of trafficData) {
+    const p = t.mesh.position;
+    const stop = shouldStopAtLight(p, t.axis);
+    let sp = t.speed;
+    if (stop) sp = Math.max(0, sp - 28 * dt);
+    else sp = Math.min(t.speed, sp + 10 * dt);
+    if (t.axis === "x") {
+      p.x += t.dir * sp * dt;
+      p.z = t.lane;
+      if (Math.abs(p.x) > 230) p.x = -230 * t.dir;
+    } else {
+      p.z += t.dir * sp * dt;
+      p.x = t.lane;
+      if (Math.abs(p.z) > 230) p.z = -230 * t.dir;
+    }
+  }
+}
+
+function updateTrafficLightsVisual(dt) {
+  const red = trafficLightState();
+  for (const L of trafficLights) {
+    L.phase = red ? 1 : 0;
+    L.group.position.y = 0;
+    const head = L.group.children[1];
+    if (head && head.material && head.material.emissive) {
+      head.material.emissive.setHex(red ? 0x330000 : 0x002200);
+    }
+  }
+}
+
+// ——————————————————————————————————————————————————————————————
+// Araba fiziği (hafif arcade + drift)
+// ——————————————————————————————————————————————————————————————
+
+function getInputSteer() {
+  let s = 0;
+  if (keys.KeyA) s += 1;
+  if (keys.KeyD) s -= 1;
+  if (Math.abs(steerTouch) > 0.05) s += steerTouch;
+  return THREE.MathUtils.clamp(s, -1, 1);
+}
+
+function getInputThrottle() {
+  let t = 0;
+  if (keys.KeyW) t += 1;
+  if (keys.KeyS) t -= 0.75;
+  if (Math.abs(throttleTouch) > 0.08) t += throttleTouch;
+  return THREE.MathUtils.clamp(t, -1, 1);
+}
+
+function integrateCar(dt) {
+  const onRoad = isOnRoad(player.root.position.x, player.root.position.z);
+  const gripHand = keys.Space ? 0.42 : 1;
+  const drag = (onRoad ? 2.6 : 6.0) * (1 + player.damage * 0.35);
+
+  const throttle = getInputThrottle();
+  const nitro = keys.ShiftLeft && player.nitro > 0.04;
+  const engine = 17 * throttle * (nitro ? 1.65 : 1);
+
+  player.speed += engine * dt;
+  if (throttle <= 0 && player.speed > 0) player.speed -= 9 * dt * Math.sign(player.speed);
+  player.speed -= player.speed * drag * dt * 0.028;
+
+  const max = MAX_SPEED * (nitro ? 1.08 : 1) * (1 - player.damage * 0.12);
+  player.speed = THREE.MathUtils.clamp(player.speed, -14, max);
+
+  const steerIn = getInputSteer();
+  player.steer = THREE.MathUtils.lerp(player.steer, steerIn, dt * 7.5);
+
+  const spd = Math.abs(player.speed);
+  const driftActive = keys.Space && spd > 10 && Math.abs(player.steer) > 0.25;
+  if (driftActive) {
+    addSkid(player.root.position.x, player.root.position.z);
+    emitSmoke();
+    player.driftTime += dt;
+  } else {
+    player.driftTime = Math.max(0, player.driftTime - dt * 0.5);
+  }
+
+  const yawRate = player.steer * (0.017 + 0.018 * (1 - THREE.MathUtils.clamp(spd / 55, 0, 1))) * gripHand;
+  player.yaw += yawRate * Math.sign(player.speed || throttle || 1);
+  player.root.rotation.y = player.yaw;
+
+  const fx = Math.sin(player.yaw);
+  const fz = Math.cos(player.yaw);
+  const ox = player.root.position.x;
+  const oz = player.root.position.z;
+  player.root.position.x += fx * player.speed * dt;
+  player.root.position.z += fz * player.speed * dt;
+  const moved = Math.hypot(player.root.position.x - ox, player.root.position.z - oz);
+  player.travel += moved;
+
+  // Süspansiyon hissi
+  const bob = Math.sin(performance.now() * 0.01 + spd * 0.15) * 0.035;
+  player.body.position.y = 1.16 + bob + (keys.Space ? -0.04 : 0);
+  player.body.rotation.z = -player.steer * (0.07 + spd * 0.0015);
+  player.body.rotation.x = -throttle * 0.04;
+
+  for (const w of player.wheels) {
+    w.mesh.rotation.x += player.speed * dt * 2.1;
+    if (w.front) w.mesh.rotation.y = -player.steer * 0.48;
+  }
+
+  // Far + fren lambası
+  const nightBias = 0.25;
+  const headInt = 0.65 + nightBias;
+  player.headlights.forEach((sp) => {
+    sp.intensity = headInt;
+  });
+  const braking = keys.KeyS && player.speed > 0.4;
+  player.brakeMat.emissive.setHex(braking ? 0xaa0000 : 0x110000);
+
+  if (nitro) {
+    player.nitro = Math.max(0, player.nitro - dt * 0.2);
+    nitroMissionAccum += dt;
+  } else {
+    player.nitro = Math.min(1, player.nitro + dt * 0.06);
+  }
 
   // Sınır
-  const halfMap = CITY_GRID * BLOCK / 2 - 3;
-  player.pos.x = THREE.MathUtils.clamp(player.pos.x, -halfMap, halfMap);
-  player.pos.z = THREE.MathUtils.clamp(player.pos.z, -halfMap, halfMap);
+  player.root.position.x = THREE.MathUtils.clamp(player.root.position.x, -WORLD_SIZE, WORLD_SIZE);
+  player.root.position.z = THREE.MathUtils.clamp(player.root.position.z, -WORLD_SIZE, WORLD_SIZE);
 
-  // Süspansiyon etkisi (sinüsoidal dikey hareket)
-  const susp = Math.sin(Date.now() * 0.008 + absSpd * 0.2) * p.suspensionAmount * (absSpd / maxSpd);
-  player.pos.y = 0.5 + susp;
+  collideWorld();
 
-  // Mesh'e uygula
-  player.mesh.position.copy(player.pos);
-  player.mesh.rotation.y = player.heading + Math.PI;
-
-  // Gövde yatması
-  const rollAmount = -player.steer * (absSpd / maxSpd) * 0.08;
-  player.mesh.rotation.z += (rollAmount - player.mesh.rotation.z) * 0.1;
-
-  // Teker animasyonları
-  const wheelSpin = player.speed * dt * 4;
-  player.wheels.forEach((w, i) => {
-    w.children[0].rotation.x += wheelSpin;
-    w.children[1].rotation.x += wheelSpin;
-    if (w.userData.isFront) {
-      w.rotation.y = player.steer * 0.9;
-    }
-  });
-
-  // Far/fren lambaları
-  setHeadlights(player.lights.headOn);
-  setBrakelights(player.braking);
-
-  // UI güncelle
-  updateSpeedUI(absSpd);
+  updateAudio(spd, nitro);
+  updateMissions(dt);
 }
 
-function updateSpeedUI(absSpd) {
-  const kmh = Math.round(absSpd * 3.6);
-  const sdEl = document.getElementById('speed-display');
-  sdEl.textContent = kmh;
-  sdEl.className = 'speed-value' + (kmh > 140 ? ' very-fast' : kmh > 80 ? ' fast' : '');
-
-  // Gear
-  const gEl = document.getElementById('gear-display');
-  if (player.speed < -0.5) gEl.textContent = 'R';
-  else if (absSpd < 1) gEl.textContent = 'N';
-  else if (kmh < 40)  gEl.textContent = '1';
-  else if (kmh < 80)  gEl.textContent = '2';
-  else if (kmh < 120) gEl.textContent = '3';
-  else if (kmh < 160) gEl.textContent = '4';
-  else gEl.textContent = '5';
-
-  // Nitro bar
-  document.getElementById('nitro-bar').style.width = player.nitro + '%';
-
-  // Damage
-  document.getElementById('damage-fill').style.width = player.damage + '%';
-
-  // Indicator
-  const bInd = document.getElementById('brake-ind');
-  if (player.braking) bInd.classList.add('brake-on'); else { bInd.classList.remove('brake-on'); bInd.classList.remove('on'); }
+function updateAudio(spd, nitro) {
+  const norm = THREE.MathUtils.clamp(spd / MAX_SPEED, 0, 1);
+  engineOsc.frequency.setTargetAtTime(65 + norm * 210, ctx.currentTime, 0.05);
+  engineGain.gain.setTargetAtTime(running ? 0.035 + norm * 0.07 : 0, ctx.currentTime, 0.08);
+  nitroGain.gain.setTargetAtTime(nitro ? 0.04 : 0, ctx.currentTime, 0.05);
 }
 
-// =====================================================================
-// FARLAR
-// =====================================================================
-function setHeadlights(on) {
-  player.lights.head.forEach(h => { h.material.emissiveIntensity = on ? 2 : 0; });
-  if (player.lights.spots) {
-    player.lights.spots.forEach(s => { s.intensity = on ? 8 : 0; });
-  }
-  document.getElementById('light-ind').className = 'ind' + (on ? ' on' : '');
-}
-function setBrakelights(on) {
-  player.lights.brake.forEach(b => { b.material.emissiveIntensity = on ? 3 : 0.05; });
-}
-function toggleLights() {
-  player.lights.headOn = !player.lights.headOn;
-}
-
-// =====================================================================
-// ÇARPIŞMA SİSTEMİ (basit AABB)
-// =====================================================================
-function checkCollisions() {
-  // Diğer araçlarla çarpışma
-  aiCars.forEach(ai => {
-    const dx = player.pos.x - ai.pos.x;
-    const dz = player.pos.z - ai.pos.z;
-    const dist = Math.sqrt(dx*dx + dz*dz);
-    if (dist < 3.5) {
-      // İtme
-      const nx = dx / dist, nz = dz / dist;
-      player.pos.x += nx * 0.5;
-      player.pos.z += nz * 0.5;
-      const impact = Math.abs(player.speed) * 0.2;
-      player.speed *= -0.3;
-      if (impact > 1) {
-        player.damage = Math.min(100, player.damage + impact * 2);
-        CAM.shakeAmount = Math.min(impact * 0.15, 0.5);
-        showDamageFlash();
-      }
-    }
-  });
-
-  // Basit bina çarpışması (harita sınırı yaklaşık)
-  // Şehir bloklarına yaklaşıldığında yavaşlat
-}
-
-function showDamageFlash() {
-  const el = document.createElement('div');
-  el.className = 'damage-flash';
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 300);
-}
-
-// =====================================================================
-// YAPAY ZEKA ARAÇLARI
-// =====================================================================
-const aiCars = [];
-
-function setupAICars() {
-  if (!G.aiEnabled) return;
-  const q = QUALITY[G.quality];
-  const count = q.aiCount;
-
-  const aiColors = [0x1a237e, 0x880e4f, 0x1b5e20, 0x4a148c, 0xe65100, 0x006064, 0x263238];
-  const size = CITY_GRID * BLOCK;
-  const half = size / 2;
-
-  for (let i = 0; i < count; i++) {
-    const color = aiColors[i % aiColors.length];
-    const mat = new THREE.MeshLambertMaterial({ color });
-    const darkMat = getMat('dark');
-
-    const group = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(2, 0.75, 4), mat);
-    body.position.y = 0.45; body.castShadow = true; group.add(body);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.55, 2.1), mat);
-    roof.position.set(0,1.0,0.2); group.add(roof);
-    const wGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.22, 8);
-    [[-0.92,0,-1.4],[0.92,0,-1.4],[-0.92,0,1.3],[0.92,0,1.3]].forEach(([x,y,z]) => {
-      const w = new THREE.Mesh(wGeo, darkMat);
-      w.position.set(x, 0.32, z); w.rotation.z = Math.PI/2;
-      group.add(w);
-    });
-
-    // Başlangıç konumu (yollarda)
-    const col = Math.floor(Math.random() * (CITY_GRID+1));
-    const t = Math.random() * size;
-    const isHoriz = Math.random() < 0.5;
-    let px, pz, heading;
-    if (isHoriz) {
-      px = -half + t;
-      pz = -half + col * BLOCK;
-      heading = Math.PI * (Math.random() < 0.5 ? 0 : 1);
-    } else {
-      px = -half + col * BLOCK;
-      pz = -half + t;
-      heading = Math.PI * (Math.random() < 0.5 ? 0.5 : 1.5);
-    }
-
-    group.position.set(px, 0.5, pz);
-    group.rotation.y = heading + Math.PI;
-    G.scene.add(group);
-
-    const aiSpeed = 6 + Math.random() * 8;
-    aiCars.push({
-      mesh: group,
-      pos: new THREE.Vector3(px, 0.5, pz),
-      heading,
-      speed: aiSpeed,
-      baseSpeed: aiSpeed,
-      isHoriz,
-      halfMap: half,
-      wheels: group.children.filter((c,i) => i > 1), // tekerlekler
-    });
-  }
-}
-
-function updateAICars(dt) {
-  aiCars.forEach(ai => {
-    // Trafik ışığı durumu kontrolü
-    let atRed = false;
-    trafficLights.forEach(tl => {
-      if (tl.state === 'red') {
-        const dx = ai.pos.x - tl.group.position.x;
-        const dz = ai.pos.z - tl.group.position.z;
-        if (Math.sqrt(dx*dx+dz*dz) < 6) atRed = true;
-      }
-    });
-
-    const targetSpeed = atRed ? 0 : ai.baseSpeed;
-    ai.speed += (targetSpeed - ai.speed) * dt * 2;
-
-    const sinH = Math.sin(ai.heading);
-    const cosH = Math.cos(ai.heading);
-    ai.pos.x += sinH * ai.speed * dt;
-    ai.pos.z += cosH * ai.speed * dt;
-
-    // Harita sınırında yön değiştir
-    const bnd = ai.halfMap - 5;
-    if (ai.pos.x > bnd || ai.pos.x < -bnd || ai.pos.z > bnd || ai.pos.z < -bnd) {
-      ai.heading += Math.PI / 2 * (Math.random() < 0.5 ? 1 : -1);
-      ai.pos.x = THREE.MathUtils.clamp(ai.pos.x, -bnd, bnd);
-      ai.pos.z = THREE.MathUtils.clamp(ai.pos.z, -bnd, bnd);
-    }
-
-    ai.mesh.position.copy(ai.pos);
-    ai.mesh.rotation.y = ai.heading + Math.PI;
-
-    // Teker dönüşü
-    const spinAmt = ai.speed * dt * 4;
-    ai.mesh.children.forEach((c,i) => {
-      if (i > 1) c.rotation.x += spinAmt;
-    });
-  });
-}
-
-// =====================================================================
-// SES SİSTEMİ
-// =====================================================================
-let audioCtx = null;
-let engineGain = null, engineOscil = null;
-let brakeSource = null;
-
-function setupAudio() {
-  try {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    engineGain = audioCtx.createGain();
-    engineGain.gain.value = 0;
-    engineGain.connect(audioCtx.destination);
-
-    engineOscil = audioCtx.createOscillator();
-    engineOscil.type = 'sawtooth';
-    engineOscil.frequency.value = 80;
-
-    // Distortion efekti motor sesi için
-    const dist = audioCtx.createWaveShaper();
-    dist.curve = makeDistortionCurve(30);
-    engineOscil.connect(dist);
-    dist.connect(engineGain);
-    engineOscil.start();
-  } catch(e) { console.warn('Web Audio desteklenmiyor:', e); }
-}
-
-function makeDistortionCurve(amount) {
-  const k = amount, n = 256, curve = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const x = (i * 2) / n - 1;
-    curve[i] = ((Math.PI + k) * x) / (Math.PI + k * Math.abs(x));
-  }
-  return curve;
-}
-
-function updateAudio(dt) {
-  if (!audioCtx || !engineOscil) return;
-  if (audioCtx.state === 'suspended') {
-    audioCtx.resume().catch(()=>{});
-    return;
-  }
-  const absSpd = Math.abs(player.speed);
-  const maxSpd = CAR_PARAMS.maxSpeed;
-
-  // Motor frekansı: rpm simülasyonu
-  const rpm = 60 + (absSpd / maxSpd) * 140;
-  engineOscil.frequency.setTargetAtTime(rpm, audioCtx.currentTime, 0.05);
-
-  // Ses seviyesi
-  const vol = (absSpd > 0.5 || isKey('forward') || isKey('back')) ? G.volume * 0.18 : G.volume * 0.05;
-  engineGain.gain.setTargetAtTime(vol, audioCtx.currentTime, 0.08);
-}
-
-// =====================================================================
-// MOBİL KONTROLLER (Joystick)
-// =====================================================================
-function setupMobileControls() {
-  const base   = document.getElementById('joystick-base');
-  const handle = document.getElementById('joystick-handle');
-  if (!base) return;
-
-  let startX = 0, startY = 0;
-  const radius = 45;
-
-  function onStart(e) {
-    e.preventDefault();
-    const t = e.touches ? e.touches[0] : e;
-    const r = base.getBoundingClientRect();
-    startX = r.left + r.width/2;
-    startY = r.top + r.height/2;
-    joystick.active = true;
-  }
-  function onMove(e) {
-    e.preventDefault();
-    if (!joystick.active) return;
-    const t = e.touches ? e.touches[0] : e;
-    let dx = t.clientX - startX;
-    let dy = t.clientY - startY;
-    const dist = Math.sqrt(dx*dx+dy*dy);
-    if (dist > radius) { dx = dx/dist*radius; dy = dy/dist*radius; }
-    joystick.x = dx / radius;
-    joystick.y = dy / radius;
-    handle.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-  }
-  function onEnd(e) {
-    e.preventDefault();
-    joystick.x = joystick.y = 0;
-    joystick.active = false;
-    handle.style.transform = 'translate(-50%, -50%)';
-  }
-
-  base.addEventListener('touchstart', onStart, { passive: false });
-  base.addEventListener('touchmove',  onMove,  { passive: false });
-  base.addEventListener('touchend',   onEnd,   { passive: false });
-
-  // Mobil butonlar
-  const mob = {
-    'mob-brake':     () => { keys[' '] = true; },
-    'mob-nitro':     () => { keys['n'] = true; },
-    'mob-handbrake': () => { keys[' '] = true; },
-    'mob-camera':    () => toggleCamera(),
-    'mob-reset':     () => resetCar(),
-    'mob-lights':    () => toggleLights(),
-  };
-  Object.entries(mob).forEach(([id, fn]) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener('touchstart', e => { e.preventDefault(); fn(); }, { passive: false });
-    el.addEventListener('touchend',   e => { e.preventDefault();
-      keys[' '] = false; keys['n'] = false;
-    }, { passive: false });
-  });
-}
-
-// =====================================================================
-// MİNİMAP
-// =====================================================================
-function drawMinimap() {
-  const canvas = document.getElementById('minimap');
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
-  const size = CITY_GRID * BLOCK;
-  const half = size / 2;
-  const scale = W / size;
-
-  ctx.clearRect(0, 0, W, H);
-
-  // Çerçeve kırpma
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(W/2, H/2, W/2-1, 0, Math.PI*2);
-  ctx.clip();
-
-  // Arka plan
-  ctx.fillStyle = '#0a1420';
-  ctx.fillRect(0, 0, W, H);
-
-  // Yollar
-  ctx.strokeStyle = '#334';
-  ctx.lineWidth = ROAD_W * 2 * scale;
-  roadSegments.forEach(seg => {
-    ctx.beginPath();
-    ctx.moveTo((seg.x1+half)*scale, (seg.z1+half)*scale);
-    ctx.lineTo((seg.x2+half)*scale, (seg.z2+half)*scale);
-    ctx.stroke();
-  });
-
-  // AI araçları
-  ctx.fillStyle = '#ff9800';
-  aiCars.forEach(ai => {
-    const mx = (ai.pos.x+half)*scale;
-    const mz = (ai.pos.z+half)*scale;
-    ctx.fillRect(mx-2, mz-2, 4, 4);
-  });
-
-  // Oyuncu
-  const px = (player.pos.x+half)*scale;
-  const pz = (player.pos.z+half)*scale;
-  ctx.save();
-  ctx.translate(px, pz);
-  ctx.rotate(player.heading);
-  ctx.fillStyle = '#00e5ff';
-  ctx.fillRect(-3, -5, 6, 10);
-  ctx.restore();
-
-  ctx.restore();
-}
-
-// =====================================================================
-// UI & MENÜ
-// =====================================================================
-function setupUI() {
-  // Menü butonları
-  document.getElementById('btn-play').addEventListener('click', startGame);
-  document.getElementById('btn-settings').addEventListener('click', () => {
-    document.getElementById('main-menu').classList.add('hidden');
-    document.getElementById('settings-menu').classList.remove('hidden');
-  });
-  document.getElementById('btn-back').addEventListener('click', () => {
-    document.getElementById('settings-menu').classList.add('hidden');
-    document.getElementById('main-menu').classList.remove('hidden');
-  });
-  document.getElementById('btn-resume').addEventListener('click', resumeGame);
-  document.getElementById('btn-main-menu').addEventListener('click', () => {
-    document.getElementById('pause-menu').classList.add('hidden');
-    document.getElementById('hud').classList.add('hidden');
-    document.getElementById('main-menu').classList.remove('hidden');
-    G.running = false; G.paused = false;
-  });
-  document.getElementById('pause-btn').addEventListener('click', togglePause);
-
-  // Kalite butonları
-  document.querySelectorAll('.quality-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.quality-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      G.quality = btn.dataset.q;
-      applyQuality();
-    });
-  });
-
-  // Toggle'lar
-  document.getElementById('shadow-toggle').addEventListener('change', e => {
-    G.shadows = e.target.checked;
-    G.renderer.shadowMap.enabled = G.shadows;
-  });
-  document.getElementById('ai-toggle').addEventListener('change', e => {
-    G.aiEnabled = e.target.checked;
-  });
-  document.getElementById('mobile-toggle').addEventListener('change', e => {
-    G.mobilePerf = e.target.checked;
-    applyQuality();
-  });
-  document.getElementById('vol-slider').addEventListener('input', e => {
-    G.volume = e.target.value / 100;
-  });
-}
-
-function applyQuality() {
-  const q = QUALITY[G.quality];
-  G.renderer.setPixelRatio(G.mobilePerf ? 1 : q.pixelRatio);
-}
-
-function startGame() {
-  document.getElementById('main-menu').classList.add('hidden');
-  document.getElementById('hud').classList.remove('hidden');
-  G.running = true;
-  G.paused  = false;
-  resetCar();
-  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-  updateMission(0);
-}
-
-function togglePause() {
-  if (!G.running) return;
-  G.paused = !G.paused;
-  if (G.paused) {
-    document.getElementById('pause-menu').classList.remove('hidden');
-  } else {
-    document.getElementById('pause-menu').classList.add('hidden');
-    G.clock.getDelta(); // delta sıfırla
-  }
-}
-function resumeGame() {
-  G.paused = false;
-  document.getElementById('pause-menu').classList.add('hidden');
-  G.clock.getDelta();
-}
-
-function toggleCamera() {
-  CAM.mode = (CAM.mode + 1) % 2;
-  document.getElementById('camera-mode').textContent = CAM.mode === 0 ? 'DIŞ KAMERA' : 'İÇ KAMERA';
-}
-
-function resetCar() {
-  player.pos.set(5, 0.5, 5);
-  player.speed = 0;
-  player.heading = 0;
-  player.steer = 0;
-  player.damage = 0;
-  if (player.mesh) {
-    player.mesh.position.copy(player.pos);
-    player.mesh.rotation.set(0, Math.PI, 0);
-  }
-}
-
-// =====================================================================
-// GÖREV SİSTEMİ
-// =====================================================================
-const missions = [
-  { desc: 'Şehri Keşfet - 5 mahalleyi ziyaret et',  done: false },
-  { desc: '150 KM/H hıza ulaş',                      done: false },
-  { desc: '60 saniye boyunca sür',                    done: false },
-  { desc: 'Nitroyu tam doldur',                       done: false },
-];
-let currentMission = 0;
-let missionTimer = 0;
-let missionKmhPeak = 0;
-
-function updateMission(dt) {
-  const m = missions[currentMission];
+function updateMissions(dt) {
+  const m = currentMission();
   if (!m || m.done) return;
-
-  missionTimer += dt;
-  missionKmhPeak = Math.max(missionKmhPeak, Math.abs(player.speed) * 3.6);
-
-  let complete = false;
-  if (currentMission === 0 && missionTimer > 30) complete = true;
-  if (currentMission === 1 && missionKmhPeak >= 150)  complete = true;
-  if (currentMission === 2 && missionTimer >= 60)      complete = true;
-  if (currentMission === 3 && player.nitro >= 99)      complete = true;
-
-  if (complete) {
-    m.done = true;
-    currentMission = (currentMission + 1) % missions.length;
-    missionTimer = 0; missionKmhPeak = 0;
-    missions[currentMission].done = false;
-    showMissionComplete();
-  }
-
-  document.getElementById('mission-desc').textContent = missions[currentMission].desc;
-}
-
-function showMissionComplete() {
-  const el = document.getElementById('mission-box');
-  el.style.borderColor = 'var(--accent)';
-  el.style.boxShadow = '0 0 20px rgba(0,229,255,0.4)';
-  setTimeout(() => { el.style.borderColor=''; el.style.boxShadow=''; }, 1500);
-}
-
-// =====================================================================
-// FPS SAYACI
-// =====================================================================
-function updateFPS(dt) {
-  G.frameCount++;
-  G.fpsTime += dt;
-  if (G.fpsTime >= 0.5) {
-    G.fpsDisplay = Math.round(G.frameCount / G.fpsTime);
-    G.frameCount = 0; G.fpsTime = 0;
-    document.getElementById('fps-counter').textContent = G.fpsDisplay + ' FPS';
-    document.getElementById('fps-counter').style.color =
-      G.fpsDisplay >= 50 ? '#00e5ff' : G.fpsDisplay >= 30 ? '#ffd600' : '#ff3d00';
+  if (m.type === "dist") {
+    if (player.travel >= m.target) advanceMission();
+  } else if (m.type === "cp") {
+    const d = player.root.position.distanceTo(m.pos);
+    if (d < m.r) advanceMission();
+  } else if (m.type === "nitro") {
+    if (nitroMissionAccum >= m.target) advanceMission();
   }
 }
 
-// =====================================================================
-// ANA DÖNGÜ
-// =====================================================================
-function animate() {
-  requestAnimationFrame(animate);
+// ——————————————————————————————————————————————————————————————
+// Kamera takip
+// ——————————————————————————————————————————————————————————————
 
-  const dt = Math.min(G.clock.getDelta(), 0.05); // max 50ms delta
+function updateCamera(dt) {
+  const mode = camModes[camIndex];
+  const yaw = player.yaw;
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const off = mode.offset.clone().applyQuaternion(q);
+  const target = player.root.position.clone().add(off);
+  camera.position.lerp(target, dt * 4.8);
+  const lookAt = player.root.position.clone().add(mode.look.clone().applyQuaternion(q));
+  camera.lookAt(lookAt);
+  camera.fov = THREE.MathUtils.lerp(camera.fov, mode.fov + Math.min(12, Math.abs(player.speed)) * 0.35, dt * 2);
+  camera.updateProjectionMatrix();
+}
 
-  if (!G.running || G.paused) {
-    G.renderer.render(G.scene, G.camera || new THREE.Camera());
-    return;
+function cycleCamera() {
+  camIndex = (camIndex + 1) % camModes.length;
+}
+
+function resetCar(fullHeal) {
+  player.root.position.copy(SPAWN);
+  player.root.rotation.y = 0;
+  player.speed = 0;
+  player.yaw = 0;
+  player.steer = 0;
+  if (fullHeal) {
+    player.damage = 0;
+    player.paint.color.setHex(0xff3355);
   }
+}
 
-  // Oyun güncellemeleri
-  updatePlayer(dt);
-  updateAICars(dt);
-  updateTrafficLights(dt);
+// ——————————————————————————————————————————————————————————————
+// HUD + mini harita
+// ——————————————————————————————————————————————————————————————
+
+let fpsAcc = { n: 0, t: 0 };
+function updateHud(dt) {
+  const kmh = Math.round(Math.abs(player.speed * 3.6));
+  el.hudSpeed.innerHTML = `${kmh} <span class="unit">km/h</span>`;
+  el.hudNitro.style.transform = `scaleX(${player.nitro})`;
+  el.hudDamage.textContent = `${Math.round(player.damage * 100)}%`;
+
+  fpsAcc.n += 1;
+  fpsAcc.t += dt;
+  if (fpsAcc.t > 0.35) {
+    el.hudFps.textContent = String(Math.round(fpsAcc.n / fpsAcc.t));
+    fpsAcc.n = 0;
+    fpsAcc.t = 0;
+  }
+}
+
+function drawMinimap() {
+  const w = el.minimap.width;
+  const h = el.minimap.height;
+  mapCtx.fillStyle = "rgba(6,10,16,0.92)";
+  mapCtx.fillRect(0, 0, w, h);
+  mapCtx.save();
+  mapCtx.translate(w / 2, h / 2);
+  const s = 0.32;
+  mapCtx.scale(s, s);
+  mapCtx.fillStyle = "#2b3b1e";
+  mapCtx.fillRect(-400, -400, 800, 800);
+  mapCtx.fillStyle = "#2c3038";
+  for (const r of STREETS) {
+    mapCtx.fillRect(r.x - r.w * 0.5, r.z - r.d * 0.5, r.w, r.d);
+  }
+  mapCtx.fillStyle = "#f0e68c";
+  for (const t of trafficData) {
+    const p = t.mesh.position;
+    mapCtx.fillRect(p.x - 2, p.z - 2, 4, 4);
+  }
+  mapCtx.fillStyle = "#7a8cac";
+  for (let i = 0; i < instParked.count; i += 1) {
+    const pk = parkedBodies[i];
+    if (!pk) continue;
+    mapCtx.fillRect(pk.x - 1.5, pk.z - 1.5, 3, 3);
+  }
+  mapCtx.fillStyle = "#40d6ff";
+  const px = player.root.position.x;
+  const pz = player.root.position.z;
+  mapCtx.beginPath();
+  mapCtx.moveTo(px + Math.sin(player.yaw) * 6, pz + Math.cos(player.yaw) * 6);
+  mapCtx.lineTo(px + Math.sin(player.yaw + 2.4) * 4, pz + Math.cos(player.yaw + 2.4) * 4);
+  mapCtx.lineTo(px + Math.sin(player.yaw - 2.4) * 4, pz + Math.cos(player.yaw - 2.4) * 4);
+  mapCtx.closePath();
+  mapCtx.fill();
+  mapCtx.restore();
+}
+
+// ——————————————————————————————————————————————————————————————
+// Ana döngü
+// ——————————————————————————————————————————————————————————————
+
+function tick(dt) {
+  integrateCar(dt);
+  updateTraffic(dt);
+  updateTrafficLightsVisual(dt);
   updateCamera(dt);
-  updateAudio(dt);
-  checkCollisions();
+  updateSmoke(dt);
+  updateHud(dt);
+  updateLOD();
   drawMinimap();
-  updateFPS(dt);
-  updateMission(dt);
-
-  G.renderer.render(G.scene, G.camera);
 }
 
-// Döngüyü başlat (her zaman render)
-animate();
+function togglePause(force) {
+  paused = typeof force === "boolean" ? force : !paused;
+  el.pause.classList.toggle("screen-visible", paused && running);
+}
+
+function onFrame() {
+  const dtRaw = Math.min(clock.getDelta(), 0.05);
+  if (running && !paused) {
+    accumulator += dtRaw;
+    while (accumulator >= FIXED_DT) {
+      tick(FIXED_DT);
+      accumulator -= FIXED_DT;
+    }
+  }
+  composer.render();
+  requestAnimationFrame(onFrame);
+}
+
+// ——————————————————————————————————————————————————————————————
+// Yükleme simülasyonu + ağır başlangıç
+// ——————————————————————————————————————————————————————————————
+
+function setLoad(p, label) {
+  const pct = Math.round(p * 100);
+  el.loadingBar.style.width = `${pct}%`;
+  el.loadingStatus.textContent = `${pct}% ${label}`;
+}
+
+async function bootSequence() {
+  setLoad(0.1, "Renderer");
+  await new Promise((r) => setTimeout(r, 30));
+  setLoad(0.35, "Harita & instancing");
+  await new Promise((r) => setTimeout(r, 40));
+  setLoad(0.55, "Post-processing");
+  rebuildPostChain();
+  await new Promise((r) => setTimeout(r, 40));
+  setLoad(0.75, "Girdi & ses");
+  joystickSetup();
+  setLoad(1, "Hazır");
+  await new Promise((r) => setTimeout(r, 120));
+  el.loading.classList.remove("screen-visible");
+  el.start.classList.add("screen-visible");
+}
+
+// ——————————————————————————————————————————————————————————————
+// Menü bağlama
+// ——————————————————————————————————————————————————————————————
+
+function applySettingsToForm() {
+  el.setQuality.value = settings.quality;
+  el.setMobile.checked = settings.mobileMode;
+  el.setSsao.checked = settings.ssao;
+}
+
+function readFormSettings() {
+  settings.quality = el.setQuality.value;
+  settings.mobileMode = el.setMobile.checked;
+  settings.ssao = el.setSsao.checked;
+  saveSettings(settings);
+  renderer.setPixelRatio(qualityPixelRatio());
+  scene.fog.far = qualityFogFar();
+  scene.fog.near = 55;
+  applyShadowCamera();
+  rebuildPostChain();
+}
+
+/** Ayarlar ekranına duraklatmadan mı yoksa ana menüden mi girildi */
+let settingsOpenedFromPause = false;
+
+el.btnOpenSettingsStart.addEventListener("click", () => {
+  settingsOpenedFromPause = false;
+  applySettingsToForm();
+  el.start.classList.remove("screen-visible");
+  el.settings.classList.add("screen-visible");
+});
+
+el.btnSettingsBack.addEventListener("click", () => {
+  el.settings.classList.remove("screen-visible");
+  if (settingsOpenedFromPause) {
+    el.pause.classList.add("screen-visible");
+  } else {
+    el.start.classList.add("screen-visible");
+  }
+});
+
+el.btnSettingsSave.addEventListener("click", () => {
+  readFormSettings();
+  el.settings.classList.remove("screen-visible");
+  if (settingsOpenedFromPause) {
+    el.pause.classList.add("screen-visible");
+    settingsOpenedFromPause = false;
+  } else {
+    el.start.classList.add("screen-visible");
+  }
+});
+
+el.btnPlay.addEventListener("click", async () => {
+  await unlockAudio();
+  readFormSettings();
+  el.start.classList.remove("screen-visible");
+  el.hud.classList.remove("hidden");
+  el.touchUi.classList.toggle("active", IS_TOUCH || UA_MOBILE);
+  missionIndex = 0;
+  missions.forEach((m) => {
+    m.done = false;
+  });
+  player.travel = 0;
+  nitroMissionAccum = 0;
+  el.missionText.textContent = currentMission()?.text || "";
+  running = true;
+  paused = false;
+});
+
+el.btnPause.addEventListener("click", () => togglePause());
+el.btnResume.addEventListener("click", () => togglePause(false));
+el.btnCamera.addEventListener("click", () => cycleCamera());
+el.btnReset.addEventListener("click", () => resetCar(true));
+
+el.btnSettingsPause.addEventListener("click", () => {
+  settingsOpenedFromPause = true;
+  applySettingsToForm();
+  el.pause.classList.remove("screen-visible");
+  el.settings.classList.add("screen-visible");
+});
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+  bloomPass.resolution.set(window.innerWidth, window.innerHeight);
+  if (ssaoPass) {
+    ssaoPass.setSize(window.innerWidth, window.innerHeight);
+  }
+});
+
+// İlk gösterim
+applySettingsToForm();
+bootSequence();
+onFrame();
