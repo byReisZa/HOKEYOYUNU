@@ -1,785 +1,159 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>City Drive 3D - Optimized Racing Game</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { overflow: hidden; background: #0a0a0a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; -webkit-user-select: none; touch-action: none; }
-        canvas { display: block; }
-        #loadingScreen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10000; transition: opacity 0.5s; }
-        #loadingScreen.hidden { opacity: 0; pointer-events: none; }
-        .loader { width: 80px; height: 80px; border: 4px solid rgba(255,255,255,0.1); border-top-color: #00d4ff; border-radius: 50%; animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .loading-text { color: #fff; margin-top: 20px; font-size: 18px; letter-spacing: 2px; text-transform: uppercase; }
-        .loading-sub { color: rgba(255,255,255,0.5); margin-top: 8px; font-size: 12px; }
-        .progress-bar { width: 300px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 20px; overflow: hidden; }
-        .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #00d4ff, #0099cc); transition: width 0.3s; }
-        #mainMenu { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; transition: opacity 0.5s; }
-        #mainMenu.hidden { opacity: 0; pointer-events: none; }
-        .game-title { font-size: 48px; font-weight: 900; color: #fff; text-shadow: 0 0 30px rgba(0,212,255,0.5), 0 0 60px rgba(0,212,255,0.3); letter-spacing: 4px; margin-bottom: 10px; }
-        .game-subtitle { font-size: 14px; color: rgba(255,255,255,0.6); letter-spacing: 8px; text-transform: uppercase; margin-bottom: 50px; }
-        .menu-btn { width: 280px; padding: 15px 30px; margin: 8px 0; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; font-size: 16px; cursor: pointer; border-radius: 8px; transition: all 0.3s; text-transform: uppercase; letter-spacing: 2px; backdrop-filter: blur(10px); }
-        .menu-btn:hover { background: rgba(0,212,255,0.2); border-color: #00d4ff; transform: translateY(-2px); box-shadow: 0 5px 20px rgba(0,212,255,0.3); }
-        .menu-btn.primary { background: linear-gradient(135deg, #00d4ff, #0099cc); border: none; font-weight: 700; }
-        .menu-btn.primary:hover { background: linear-gradient(135deg, #00e5ff, #00aadd); box-shadow: 0 5px 30px rgba(0,212,255,0.5); }
-        #settingsMenu, #pauseMenu, #controlsMenu { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(10px); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 9998; }
-        #settingsMenu.active, #pauseMenu.active, #controlsMenu.active { display: flex; }
-        .settings-panel { background: rgba(20,20,40,0.9); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 40px; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
-        .settings-title { color: #fff; font-size: 24px; margin-bottom: 30px; text-align: center; text-transform: uppercase; letter-spacing: 3px; }
-        .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
-        .setting-label { color: rgba(255,255,255,0.8); font-size: 14px; }
-        .setting-value { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; min-width: 120px; text-align: center; }
-        .setting-value:hover { background: rgba(255,255,255,0.15); }
-        .controls-list { color: rgba(255,255,255,0.8); font-size: 14px; line-height: 2; }
-        .controls-list span { display: inline-block; background: rgba(0,212,255,0.2); padding: 2px 8px; border-radius: 4px; margin-right: 8px; color: #00d4ff; font-weight: bold; min-width: 80px; text-align: center; }
-        #hud { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; display: none; }
-        #hud.active { display: block; }
-        .speedometer { position: absolute; bottom: 30px; right: 30px; width: 160px; height: 160px; }
-        .speed-bg { fill: none; stroke: rgba(255,255,255,0.1); stroke-width: 8; }
-        .speed-fill { fill: none; stroke: url(#speedGradient); stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 0.1s; transform: rotate(-90deg); transform-origin: 50% 50%; }
-        .speed-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; font-size: 36px; font-weight: 900; text-align: center; }
-        .speed-unit { position: absolute; bottom: 35px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.5); font-size: 12px; letter-spacing: 2px; }
-        .nitro-container { position: absolute; bottom: 200px; right: 50px; width: 120px; height: 12px; background: rgba(0,0,0,0.5); border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }
-        .nitro-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff6b00, #ffaa00); transition: width 0.2s; border-radius: 6px; }
-        .nitro-label { position: absolute; bottom: 215px; right: 50px; color: #ffaa00; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; }
-        .fps-counter { position: absolute; top: 20px; left: 20px; color: rgba(255,255,255,0.6); font-size: 12px; font-family: monospace; background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 4px; }
-        .minimap { position: absolute; bottom: 30px; left: 30px; width: 180px; height: 180px; background: rgba(0,0,0,0.6); border: 2px solid rgba(255,255,255,0.2); border-radius: 12px; overflow: hidden; }
-        .minimap canvas { width: 100%; height: 100%; }
-        .gear-display { position: absolute; bottom: 200px; right: 200px; color: #fff; font-size: 48px; font-weight: 900; text-shadow: 0 0 10px rgba(0,212,255,0.5); }
-        .notification { position: absolute; top: 80px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity 0.3s; pointer-events: none; border: 1px solid rgba(255,255,255,0.1); text-align: center; max-width: 80%; }
-        .notification.show { opacity: 1; }
-        .damage-bar { position: absolute; top: 20px; right: 20px; width: 150px; height: 8px; background: rgba(0,0,0,0.5); border-radius: 4px; overflow: hidden; }
-        .damage-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff3333, #ff6666); transition: width 0.3s; }
-        .damage-label { position: absolute; top: 32px; right: 20px; color: rgba(255,255,255,0.5); font-size: 10px; }
-        .task-display { position: absolute; top: 60px; left: 20px; background: rgba(0,0,0,0.5); padding: 10px 15px; border-radius: 8px; border-left: 3px solid #00d4ff; color: #fff; font-size: 13px; max-width: 250px; }
-        .task-title { color: #00d4ff; font-size: 11px; text-transform: uppercase; margin-bottom: 4px; }
-        .camera-indicator { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.4); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; }
-        .mobile-controls { display: none; position: fixed; bottom: 0; left: 0; width: 100%; height: 250px; z-index: 200; pointer-events: none; }
-        .mobile-btn { position: absolute; pointer-events: all; width: 70px; height: 70px; border-radius: 50%; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3); color: #fff; font-size: 24px; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(5px); user-select: none; -webkit-user-select: none; touch-action: manipulation; }
-        .mobile-btn:active { background: rgba(0,212,255,0.3); }
-        .mobile-btn.left { bottom: 80px; left: 30px; }
-        .mobile-btn.right { bottom: 80px; left: 110px; }
-        .mobile-btn.up { bottom: 160px; right: 30px; }
-        .mobile-btn.down { bottom: 80px; right: 30px; }
-        .mobile-btn.brake { bottom: 80px; right: 110px; background: rgba(255,50,50,0.2); }
-        .mobile-btn.camera { top: 80px; right: 20px; width: 50px; height: 50px; font-size: 18px; }
-        .mobile-btn.nitro { bottom: 160px; right: 110px; background: rgba(255,150,0,0.3); }
-        @media (max-width: 768px) {
-            .game-title { font-size: 32px; }
-            .mobile-controls { display: block; }
-            .speedometer { width: 120px; height: 120px; bottom: 20px; right: 20px; }
-            .speed-text { font-size: 28px; }
-            .minimap { width: 120px; height: 120px; bottom: 20px; left: 20px; }
-            .gear-display { font-size: 32px; bottom: 150px; right: 150px; }
-            .menu-btn { width: 240px; padding: 12px 20px; }
-        }
-    </style>
-<base target="_blank">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>UrbanDrive 3D</title>
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-    <div id="loadingScreen">
-        <div class="loader"></div>
-        <div class="loading-text">Yukleniyor</div>
-        <div class="loading-sub">Sehir olusturuluyor...</div>
-        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-    </div>
 
-    <div id="mainMenu">
-        <div class="game-title">CITY DRIVE 3D</div>
-        <div class="game-subtitle">Acik Dunya Surus Simulasyonu</div>
-        <button class="menu-btn primary" onclick="startGame()">Serbest Surus</button>
-        <button class="menu-btn" onclick="showSettings()">Ayarlar</button>
-        <button class="menu-btn" onclick="showControls()">Kontroller</button>
+  <!-- ===== LOADING SCREEN ===== -->
+  <div id="loading-screen">
+    <div class="loading-content">
+      <div class="logo-text">URBAN<span>DRIVE</span></div>
+      <div class="loading-bar-wrap">
+        <div class="loading-bar" id="loading-bar"></div>
+      </div>
+      <div class="loading-label" id="loading-label">Yükleniyor... 0%</div>
     </div>
+  </div>
 
-    <div id="settingsMenu">
-        <div class="settings-panel">
-            <div class="settings-title">Ayarlar</div>
-            <div class="setting-row"><span class="setting-label">Grafik Kalitesi</span><span class="setting-value" id="qualitySetting" onclick="cycleQuality()">Yuksek</span></div>
-            <div class="setting-row"><span class="setting-label">Golgeler</span><span class="setting-value" id="shadowSetting" onclick="toggleShadows()">Acik</span></div>
-            <div class="setting-row"><span class="setting-label">Ses Efektleri</span><span class="setting-value" id="soundSetting" onclick="toggleSound()">Acik</span></div>
-            <div class="setting-row"><span class="setting-label">Hassasiyet</span><span class="setting-value" id="sensSetting" onclick="cycleSensitivity()">Orta</span></div>
-            <div class="setting-row"><span class="setting-label">Kamera</span><span class="setting-value" id="camSetting" onclick="cycleCamera()">Takip</span></div>
-            <button class="menu-btn" style="width:100%;margin-top:20px;" onclick="hideSettings()">Geri Don</button>
+  <!-- ===== MAIN MENU ===== -->
+  <div id="main-menu" class="hidden">
+    <div class="menu-bg"></div>
+    <div class="menu-content">
+      <div class="menu-logo">URBAN<span>DRIVE</span></div>
+      <div class="menu-subtitle">Gerçekçi 3D Şehir Sürüş Simülasyonu</div>
+      <div class="menu-buttons">
+        <button class="menu-btn primary" id="btn-play">OYNA</button>
+        <button class="menu-btn" id="btn-settings">AYARLAR</button>
+      </div>
+      <div class="menu-controls">
+        <span>WASD / Ok Tuşları • Boşluk: El Freni • N: Nitro • C: Kamera • R: Reset • H: Farlar</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SETTINGS MENU ===== -->
+  <div id="settings-menu" class="hidden">
+    <div class="settings-panel">
+      <h2>AYARLAR</h2>
+      <div class="setting-row">
+        <label>Grafik Kalitesi</label>
+        <div class="btn-group">
+          <button class="quality-btn active" data-q="low">DÜŞÜK</button>
+          <button class="quality-btn" data-q="medium">ORTA</button>
+          <button class="quality-btn" data-q="high">YÜKSEK</button>
         </div>
+      </div>
+      <div class="setting-row">
+        <label>Ses</label>
+        <input type="range" id="vol-slider" min="0" max="100" value="70" />
+      </div>
+      <div class="setting-row">
+        <label>Gölgeler</label>
+        <label class="toggle"><input type="checkbox" id="shadow-toggle" checked /><span class="slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <label>Yapay Zeka Araçları</label>
+        <label class="toggle"><input type="checkbox" id="ai-toggle" checked /><span class="slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <label>Mobil Performans Modu</label>
+        <label class="toggle"><input type="checkbox" id="mobile-toggle" /><span class="slider"></span></label>
+      </div>
+      <button class="menu-btn primary" id="btn-back">GERİ</button>
+    </div>
+  </div>
+
+  <!-- ===== PAUSE MENU ===== -->
+  <div id="pause-menu" class="hidden">
+    <div class="pause-panel">
+      <h2>OYUN DURAKLATILDI</h2>
+      <button class="menu-btn primary" id="btn-resume">DEVAM ET</button>
+      <button class="menu-btn" id="btn-main-menu">ANA MENÜ</button>
+    </div>
+  </div>
+
+  <!-- ===== GAME CANVAS ===== -->
+  <canvas id="game-canvas"></canvas>
+
+  <!-- ===== HUD ===== -->
+  <div id="hud" class="hidden">
+    <!-- Speedometer -->
+    <div class="hud-speedometer">
+      <div class="speed-value" id="speed-display">0</div>
+      <div class="speed-unit">KM/H</div>
+      <div class="gear-display" id="gear-display">N</div>
     </div>
 
-    <div id="controlsMenu">
-        <div class="settings-panel">
-            <div class="settings-title">Kontroller</div>
-            <div class="controls-list">
-                <div><span>W / Up</span> Gaz</div>
-                <div><span>S / Down</span> Fren / Geri</div>
-                <div><span>A / Left</span> Sola Don</div>
-                <div><span>D / Right</span> Saga Don</div>
-                <div><span>SPACE</span> El Freni</div>
-                <div><span>N</span> Nitro</div>
-                <div><span>C</span> Kamera Degistir</div>
-                <div><span>R</span> Arabayi Sifirla</div>
-                <div><span>ESC</span> Duraklat</div>
-            </div>
-            <button class="menu-btn" style="width:100%;margin-top:20px;" onclick="hideControls()">Geri Don</button>
-        </div>
+    <!-- Nitro Bar -->
+    <div class="nitro-container">
+      <div class="nitro-label">NİTRO</div>
+      <div class="nitro-bar-bg">
+        <div class="nitro-bar" id="nitro-bar"></div>
+      </div>
     </div>
 
-    <div id="pauseMenu">
-        <div class="settings-panel">
-            <div class="settings-title">Duraklatildi</div>
-            <button class="menu-btn primary" style="width:100%;margin:5px 0;" onclick="resumeGame()">Devam Et</button>
-            <button class="menu-btn" style="width:100%;margin:5px 0;" onclick="showSettings()">Ayarlar</button>
-            <button class="menu-btn" style="width:100%;margin:5px 0;" onclick="resetCar()">Arabayi Sifirla</button>
-            <button class="menu-btn" style="width:100%;margin:5px 0;" onclick="backToMenu()">Ana Menu</button>
-        </div>
+    <!-- Top stats -->
+    <div class="hud-top">
+      <div class="fps-counter" id="fps-counter">60 FPS</div>
+      <div class="camera-mode" id="camera-mode">DIŞ KAMERA</div>
     </div>
 
-    <div id="hud">
-        <div class="speedometer">
-            <svg width="100%" height="100%" viewBox="0 0 160 160">
-                <defs><linearGradient id="speedGradient" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" style="stop-color:#00d4ff"/><stop offset="50%" style="stop-color:#00aa88"/><stop offset="100%" style="stop-color:#ff3333"/></linearGradient></defs>
-                <circle class="speed-bg" cx="80" cy="80" r="70"/>
-                <circle class="speed-fill" id="speedFill" cx="80" cy="80" r="70" stroke-dasharray="440" stroke-dashoffset="440"/>
-            </svg>
-            <div class="speed-text" id="speedText">0</div>
-            <div class="speed-unit">KM/H</div>
-        </div>
-        <div class="nitro-label">NITRO</div>
-        <div class="nitro-container"><div class="nitro-fill" id="nitroFill"></div></div>
-        <div class="gear-display" id="gearDisplay">N</div>
-        <div class="fps-counter" id="fpsCounter">FPS: 60</div>
-        <div class="minimap"><canvas id="minimapCanvas" width="180" height="180"></canvas></div>
-        <div class="damage-bar"><div class="damage-fill" id="damageFill"></div></div>
-        <div class="damage-label">HASAR</div>
-        <div class="task-display"><div class="task-title">Gorev</div><div id="taskText">Serbest surus modu - Sehri kesfet!</div></div>
-        <div class="camera-indicator" id="camIndicator">DIS KAMERA</div>
-        <div class="notification" id="notification"></div>
-        <div class="mobile-controls" id="mobileControls">
-            <div class="mobile-btn left" id="btnLeft">L</div>
-            <div class="mobile-btn right" id="btnRight">R</div>
-            <div class="mobile-btn up" id="btnUp">U</div>
-            <div class="mobile-btn down" id="btnDown">D</div>
-            <div class="mobile-btn brake" id="btnBrake">B</div>
-            <div class="mobile-btn nitro" id="btnNitro">N</div>
-            <div class="mobile-btn camera" id="btnCam">C</div>
-        </div>
+    <!-- Damage indicator -->
+    <div class="damage-bar-wrap">
+      <div class="damage-label">HASAR</div>
+      <div class="damage-bg">
+        <div class="damage-fill" id="damage-fill"></div>
+      </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script>
-    // CITY DRIVE 3D - OPTIMIZED RACING GAME
-    let scene, camera, renderer, clock;
-    let car, wheels = [];
-    let trafficCars = [], parkedCars = [], trafficLights = [], buildings = [], trees = [];
-    let particles = [], skidMarks = [];
-    let carVelocity = new THREE.Vector3();
-    let steeringAngle = 0, speed = 0, gear = 0, nitroAmount = 100, damage = 0;
-    let isDrifting = false, driftTime = 0;
-    let keys = {};
-    let mobileInput = { up: false, down: false, left: false, right: false, brake: false, nitro: false };
-    let cameraMode = 0;
-    let cameraTarget = new THREE.Vector3();
-    let cameraPosition = new THREE.Vector3();
-    let gameState = 'loading';
-    let settings = { quality: 'high', shadows: true, sound: true, sensitivity: 1, fov: 75 };
-    let fps = 60, frameCount = 0, lastTime = performance.now(), deltaTime = 0.016;
-    let audioCtx = null, engineOscillator = null, engineGain = null;
-    const MAX_SPEED = 220, ACCELERATION = 80, BRAKING = 120;
-    const MAX_STEERING = 0.6, STEERING_SPEED = 2.5, FRICTION = 0.98;
-    const CITY_SIZE = 800, STREET_WIDTH = 20, BLOCK_SIZE = 100;
+    <!-- Minimap -->
+    <canvas id="minimap" width="160" height="160"></canvas>
+    <div class="minimap-label">HARİTA</div>
 
-    function init() {
-        updateProgress(10);
-        scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87CEEB);
-        scene.fog = new THREE.Fog(0x87CEEB, 100, 500);
-        camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / window.innerHeight, 0.1, 1000);
-        renderer = new THREE.WebGLRenderer({ antialias: settings.quality === 'high', powerPreference: 'high-performance' });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, settings.quality === 'low' ? 1 : 2));
-        renderer.shadowMap.enabled = settings.shadows;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        renderer.outputEncoding = THREE.sRGBEncoding;
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 1.2;
-        document.body.appendChild(renderer.domElement);
-        updateProgress(20);
-        setupLighting();
-        updateProgress(30);
-        createCity();
-        updateProgress(60);
-        createCar();
-        updateProgress(80);
-        createTraffic();
-        createParkedCars();
-        updateProgress(90);
-        setupEventListeners();
-        clock = new THREE.Clock();
-        updateProgress(100);
-        setTimeout(() => { document.getElementById('loadingScreen').classList.add('hidden'); gameState = 'menu'; }, 500);
-        animate();
-    }
+    <!-- Mission -->
+    <div class="mission-box" id="mission-box">
+      <div class="mission-title">GÖREV</div>
+      <div class="mission-desc" id="mission-desc">Şehri Keşfet</div>
+    </div>
 
-    function updateProgress(p) { document.getElementById('progressFill').style.width = p + '%'; }
+    <!-- Light indicators -->
+    <div class="light-indicators">
+      <span id="light-ind" class="ind off">FAR</span>
+      <span id="brake-ind" class="ind off">FREN</span>
+      <span id="nitro-ind" class="ind off">NTR</span>
+    </div>
 
-    function setupLighting() {
-        scene.add(new THREE.AmbientLight(0x404040, 0.6));
-        const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-        sun.position.set(100, 200, 100);
-        sun.castShadow = settings.shadows;
-        sun.shadow.mapSize.width = settings.quality === 'high' ? 2048 : 1024;
-        sun.shadow.mapSize.height = settings.quality === 'high' ? 2048 : 1024;
-        sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 500;
-        sun.shadow.camera.left = -200; sun.shadow.camera.right = 200;
-        sun.shadow.camera.top = 200; sun.shadow.camera.bottom = -200;
-        sun.shadow.bias = -0.0005;
-        scene.add(sun);
-        scene.add(new THREE.HemisphereLight(0x87CEEB, 0x362d1d, 0.4));
-    }
+    <!-- Mobile controls -->
+    <div id="mobile-controls">
+      <div id="joystick-zone">
+        <div id="joystick-base">
+          <div id="joystick-handle"></div>
+        </div>
+      </div>
+      <div id="mobile-buttons">
+        <button class="mob-btn" id="mob-brake">FREN</button>
+        <button class="mob-btn" id="mob-nitro">NİTRO</button>
+        <button class="mob-btn" id="mob-handbrake">EL FR.</button>
+        <button class="mob-btn" id="mob-camera">CAM</button>
+        <button class="mob-btn" id="mob-reset">RESET</button>
+        <button class="mob-btn" id="mob-lights">FAR</button>
+      </div>
+    </div>
 
-    function createCity() {
-        const ground = new THREE.Mesh(new THREE.PlaneGeometry(CITY_SIZE * 2, CITY_SIZE * 2), new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.9, metalness: 0.1 }));
-        ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
-        const streetMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.8 });
-        const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 });
-        const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        for (let x = -CITY_SIZE/2; x <= CITY_SIZE/2; x += BLOCK_SIZE) {
-            const sH = new THREE.Mesh(new THREE.PlaneGeometry(CITY_SIZE, STREET_WIDTH), streetMat);
-            sH.rotation.x = -Math.PI / 2; sH.position.set(0, 0.05, x); sH.receiveShadow = true; scene.add(sH);
-            const sV = new THREE.Mesh(new THREE.PlaneGeometry(STREET_WIDTH, CITY_SIZE), streetMat);
-            sV.rotation.x = -Math.PI / 2; sV.position.set(x, 0.05, 0); sV.receiveShadow = true; scene.add(sV);
-            const sw1 = new THREE.Mesh(new THREE.BoxGeometry(CITY_SIZE, 0.3, 2), sidewalkMat);
-            sw1.position.set(0, 0.15, x - STREET_WIDTH/2 - 1); sw1.receiveShadow = true; scene.add(sw1);
-            const sw2 = new THREE.Mesh(new THREE.BoxGeometry(CITY_SIZE, 0.3, 2), sidewalkMat);
-            sw2.position.set(0, 0.15, x + STREET_WIDTH/2 + 1); sw2.receiveShadow = true; scene.add(sw2);
-            const sw3 = new THREE.Mesh(new THREE.BoxGeometry(2, 0.3, CITY_SIZE), sidewalkMat);
-            sw3.position.set(x - STREET_WIDTH/2 - 1, 0.15, 0); sw3.receiveShadow = true; scene.add(sw3);
-            const sw4 = new THREE.Mesh(new THREE.BoxGeometry(2, 0.3, CITY_SIZE), sidewalkMat);
-            sw4.position.set(x + STREET_WIDTH/2 + 1, 0.15, 0); sw4.receiveShadow = true; scene.add(sw4);
-            for (let z = -CITY_SIZE/2; z < CITY_SIZE/2; z += 15) {
-                const d1 = new THREE.Mesh(new THREE.PlaneGeometry(1, 8), lineMat);
-                d1.rotation.x = -Math.PI / 2; d1.position.set(x, 0.06, z); scene.add(d1);
-                const d2 = new THREE.Mesh(new THREE.PlaneGeometry(8, 1), lineMat);
-                d2.rotation.x = -Math.PI / 2; d2.position.set(z, 0.06, x); scene.add(d2);
-            }
-            for (let z = -CITY_SIZE/2; z <= CITY_SIZE/2; z += BLOCK_SIZE) createCrosswalk(x, z);
-        }
-        createBuildings(); createTrees(); createTrafficLights();
-    }
+    <!-- Pause button -->
+    <button id="pause-btn" title="Durdur">⏸</button>
+  </div>
 
-    function createCrosswalk(x, z) {
-        const cwMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        for (let i = -8; i < 8; i += 3) {
-            const b1 = new THREE.Mesh(new THREE.PlaneGeometry(2, 0.8), cwMat);
-            b1.rotation.x = -Math.PI / 2; b1.position.set(x + i, 0.06, z); scene.add(b1);
-            const b2 = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 2), cwMat);
-            b2.rotation.x = -Math.PI / 2; b2.position.set(x, 0.06, z + i); scene.add(b2);
-        }
-    }
+  <!-- Drift/Nitro flash overlay -->
+  <div id="speed-lines" class="hidden"></div>
 
-    function createBuildings() {
-        const colors = [0x8B4513, 0x696969, 0xA0522D, 0x708090, 0x556B2F, 0x4682B4];
-        for (let x = -CITY_SIZE/2 + BLOCK_SIZE/2; x < CITY_SIZE/2; x += BLOCK_SIZE) {
-            for (let z = -CITY_SIZE/2 + BLOCK_SIZE/2; z < CITY_SIZE/2; z += BLOCK_SIZE) {
-                if (Math.random() > 0.85) continue;
-                const w = BLOCK_SIZE - STREET_WIDTH - 8, d = BLOCK_SIZE - STREET_WIDTH - 8, h = 20 + Math.random() * 60;
-                const c = colors[Math.floor(Math.random() * colors.length)];
-                const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, metalness: 0.1 }));
-                b.position.set(x, h/2, z); b.castShadow = true; b.receiveShadow = true; scene.add(b); buildings.push(b);
-                if (settings.quality !== 'low') {
-                    const rows = Math.floor(h / 8), cols = Math.floor(w / 8);
-                    const wm = new THREE.MeshBasicMaterial({ color: 0x87CEEB });
-                    for (let r = 0; r < rows; r++) for (let c2 = 0; c2 < cols; c2++) if (Math.random() > 0.3) {
-                        const win = new THREE.Mesh(new THREE.PlaneGeometry(3, 4), wm);
-                        win.position.set(x - w/2 + 4 + c2 * 8, 5 + r * 8, z + d/2 + 0.1); scene.add(win);
-                    }
-                }
-                const roof = new THREE.Mesh(new THREE.BoxGeometry(w - 4, 2, d - 4), new THREE.MeshStandardMaterial({ color: 0x333333 }));
-                roof.position.set(x, h + 1, z); scene.add(roof);
-            }
-        }
-    }
-
-    function createTrees() {
-        const tm = new THREE.MeshStandardMaterial({ color: 0x228B22, roughness: 0.8 });
-        const trm = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.9 });
-        for (let i = 0; i < 150; i++) {
-            const x = (Math.random() - 0.5) * CITY_SIZE, z = (Math.random() - 0.5) * CITY_SIZE;
-            if (Math.abs(x % BLOCK_SIZE) < STREET_WIDTH/2 || Math.abs(z % BLOCK_SIZE) < STREET_WIDTH/2) continue;
-            const tg = new THREE.Group();
-            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.8, 4, 6), trm);
-            trunk.position.y = 2; trunk.castShadow = true; tg.add(trunk);
-            const fol = new THREE.Mesh(new THREE.ConeGeometry(3, 8, 6), tm);
-            fol.position.y = 7; fol.castShadow = true; tg.add(fol);
-            tg.position.set(x, 0, z); scene.add(tg); trees.push(tg);
-        }
-    }
-
-    function createTrafficLights() {
-        const pm = new THREE.MeshStandardMaterial({ color: 0x333333 });
-        const bm = new THREE.MeshStandardMaterial({ color: 0x222222 });
-        for (let x = -CITY_SIZE/2; x <= CITY_SIZE/2; x += BLOCK_SIZE) {
-            for (let z = -CITY_SIZE/2; z <= CITY_SIZE/2; z += BLOCK_SIZE) {
-                if (Math.abs(x) > CITY_SIZE/2 - 10 || Math.abs(z) > CITY_SIZE/2 - 10) continue;
-                const poses = [
-                    { x: x - STREET_WIDTH/2 - 2, z: z - STREET_WIDTH/2 - 2, rot: 0 },
-                    { x: x + STREET_WIDTH/2 + 2, z: z + STREET_WIDTH/2 + 2, rot: Math.PI },
-                    { x: x - STREET_WIDTH/2 - 2, z: z + STREET_WIDTH/2 + 2, rot: Math.PI/2 },
-                    { x: x + STREET_WIDTH/2 + 2, z: z - STREET_WIDTH/2 - 2, rot: -Math.PI/2 }
-                ];
-                poses.forEach(pos => {
-                    const g = new THREE.Group();
-                    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 8, 8), pm);
-                    pole.position.y = 4; pole.castShadow = true; g.add(pole);
-                    const box = new THREE.Mesh(new THREE.BoxGeometry(1.5, 4, 1.5), bm);
-                    box.position.y = 8; g.add(box);
-                    const rl = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
-                    rl.position.set(0, 9, 0.8); g.add(rl);
-                    const yl = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), new THREE.MeshBasicMaterial({ color: 0x444400 }));
-                    yl.position.set(0, 8, 0.8); g.add(yl);
-                    const gl = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), new THREE.MeshBasicMaterial({ color: 0x004400 }));
-                    gl.position.set(0, 7, 0.8); g.add(gl);
-                    g.position.set(pos.x, 0, pos.z); g.rotation.y = pos.rot; scene.add(g);
-                    trafficLights.push({ mesh: g, red: rl, yellow: yl, green: gl, state: Math.random() > 0.5 ? 'green' : 'red', timer: Math.random() * 10 });
-                });
-            }
-        }
-    }
-
-    function createCar() {
-        car = new THREE.Group();
-        const bm = new THREE.MeshStandardMaterial({ color: 0xcc0000, roughness: 0.2, metalness: 0.7, envMapIntensity: 1 });
-        const gm = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1, metalness: 0.9, transparent: true, opacity: 0.7 });
-        const blm = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
-        const cm = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.1, metalness: 1 });
-        const lm = new THREE.MeshStandardMaterial({ color: 0xffffcc, emissive: 0xffffcc, emissiveIntensity: 0.5 });
-        const tm = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.3 });
-        const mb = new THREE.Mesh(new THREE.BoxGeometry(2, 0.8, 4.5), bm);
-        mb.position.y = 0.6; mb.castShadow = true; car.add(mb);
-        const cab = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.7, 2.5), gm);
-        cab.position.set(0, 1.25, -0.3); cab.castShadow = true; car.add(cab);
-        const roof = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.05, 2.6), bm);
-        roof.position.set(0, 1.6, -0.3); car.add(roof);
-        const hood = new THREE.Mesh(new THREE.BoxGeometry(2, 0.05, 1.2), bm);
-        hood.position.set(0, 1.01, 1.4); car.add(hood);
-        const fb = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.3, 0.3), blm);
-        fb.position.set(0, 0.4, 2.3); car.add(fb);
-        const rb = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.3, 0.3), blm);
-        rb.position.set(0, 0.4, -2.3); car.add(rb);
-        const hlL = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.1), lm);
-        hlL.position.set(-0.7, 0.7, 2.26); car.add(hlL);
-        const hlR = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.1), lm);
-        hlR.position.set(0.7, 0.7, 2.26); car.add(hlR);
-        const sl = new THREE.SpotLight(0xffffcc, 2, 80, Math.PI/6, 0.5, 1);
-        sl.position.set(-0.7, 0.7, 2.3); sl.target.position.set(-0.7, 0, 10); car.add(sl); car.add(sl.target);
-        const sr = new THREE.SpotLight(0xffffcc, 2, 80, Math.PI/6, 0.5, 1);
-        sr.position.set(0.7, 0.7, 2.3); sr.target.position.set(0.7, 0, 10); car.add(sr); car.add(sr.target);
-        const tlL = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.15, 0.1), tm);
-        tlL.position.set(-0.7, 0.8, -2.26); car.add(tlL);
-        const tlR = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.15, 0.1), tm);
-        tlR.position.set(0.7, 0.8, -2.26); car.add(tlR);
-        const gr = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.3, 0.05), cm);
-        gr.position.set(0, 0.7, 2.28); car.add(gr);
-        const ml = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.15), bm);
-        ml.position.set(-1.1, 1.1, 0.8); car.add(ml);
-        const mr = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.15), bm);
-        mr.position.set(1.1, 1.1, 0.8); car.add(mr);
-        const wg = new THREE.CylinderGeometry(0.35, 0.35, 0.25, 16);
-        const wm = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
-        const rm = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.3, metalness: 0.8 });
-        const wps = [{ x: -1, y: 0.35, z: 1.4 }, { x: 1, y: 0.35, z: 1.4 }, { x: -1, y: 0.35, z: -1.4 }, { x: 1, y: 0.35, z: -1.4 }];
-        wps.forEach((pos, i) => {
-            const wg2 = new THREE.Group();
-            const tire = new THREE.Mesh(wg, wm); tire.rotation.z = Math.PI / 2; tire.castShadow = true; wg2.add(tire);
-            const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.26, 12), rm); rim.rotation.z = Math.PI / 2; wg2.add(rim);
-            wg2.position.set(pos.x, pos.y, pos.z); car.add(wg2); wheels.push(wg2);
-        });
-        car.userData.exhaustPos = new THREE.Vector3(0, 0.3, -2.3);
-        scene.add(car); car.position.set(0, 0, 0);
-    }
-
-    function createTraffic() {
-        const colors = [0x0066cc, 0xcc9900, 0x66cc00, 0xcc0066, 0x666666, 0xffffff];
-        for (let i = 0; i < 20; i++) {
-            const c = colors[Math.floor(Math.random() * colors.length)];
-            const tc = createSimpleCar(c);
-            const sx = Math.floor(Math.random() * 10) * BLOCK_SIZE - CITY_SIZE/2 + BLOCK_SIZE/2;
-            const sz = Math.floor(Math.random() * 10) * BLOCK_SIZE - CITY_SIZE/2 + BLOCK_SIZE/2;
-            tc.position.set(sx + (Math.random() - 0.5) * 10, 0, sz + (Math.random() - 0.5) * 10);
-            tc.rotation.y = Math.random() > 0.5 ? 0 : Math.PI/2;
-            scene.add(tc);
-            trafficCars.push({ mesh: tc, speed: 10 + Math.random() * 15, direction: Math.random() > 0.5 ? 1 : -1, axis: Math.random() > 0.5 ? 'x' : 'z', targetSpeed: 10 + Math.random() * 15 });
-        }
-    }
-
-    function createParkedCars() {
-        const colors = [0x444444, 0x888888, 0xaa4444, 0x44aa44, 0x4444aa];
-        for (let i = 0; i < 30; i++) {
-            const c = colors[Math.floor(Math.random() * colors.length)];
-            const pc = createSimpleCar(c);
-            const x = (Math.random() - 0.5) * CITY_SIZE, z = (Math.random() - 0.5) * CITY_SIZE;
-            const ns = Math.abs(x % BLOCK_SIZE) > BLOCK_SIZE/2 - STREET_WIDTH/2 - 5 || Math.abs(z % BLOCK_SIZE) > BLOCK_SIZE/2 - STREET_WIDTH/2 - 5;
-            if (ns && Math.abs(x) < CITY_SIZE/2 - 20 && Math.abs(z) < CITY_SIZE/2 - 20) {
-                pc.position.set(x, 0, z); pc.rotation.y = Math.random() * Math.PI * 2;
-                scene.add(pc); parkedCars.push(pc);
-            }
-        }
-    }
-
-    function createSimpleCar(color) {
-        const g = new THREE.Group();
-        const bm = new THREE.MeshStandardMaterial({ color: color, roughness: 0.4, metalness: 0.5 });
-        const gm = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.1, metalness: 0.8 });
-        const wm = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
-        const b = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.7, 4), bm);
-        b.position.y = 0.6; b.castShadow = true; g.add(b);
-        const c = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.6, 2.2), gm);
-        c.position.set(0, 1.15, -0.2); g.add(c);
-        const wg = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 12);
-        const ps = [{ x: -0.9, z: 1.2 }, { x: 0.9, z: 1.2 }, { x: -0.9, z: -1.2 }, { x: 0.9, z: -1.2 }];
-        ps.forEach(p => { const w = new THREE.Mesh(wg, wm); w.rotation.z = Math.PI / 2; w.position.set(p.x, 0.3, p.z); g.add(w); });
-        return g;
-    }
-
-    function setupEventListeners() {
-        window.addEventListener('resize', onWindowResize);
-        document.addEventListener('keydown', onKeyDown);
-        document.addEventListener('keyup', onKeyUp);
-        setupMobileControls();
-    }
-
-    function setupMobileControls() {
-        const addTouch = (btn, key) => {
-            btn.addEventListener('touchstart', (e) => { e.preventDefault(); mobileInput[key] = true; });
-            btn.addEventListener('touchend', (e) => { e.preventDefault(); mobileInput[key] = false; });
-            btn.addEventListener('mousedown', (e) => { mobileInput[key] = true; });
-            btn.addEventListener('mouseup', (e) => { mobileInput[key] = false; });
-        };
-        addTouch(document.getElementById('btnUp'), 'up');
-        addTouch(document.getElementById('btnDown'), 'down');
-        addTouch(document.getElementById('btnLeft'), 'left');
-        addTouch(document.getElementById('btnRight'), 'right');
-        addTouch(document.getElementById('btnBrake'), 'brake');
-        addTouch(document.getElementById('btnNitro'), 'nitro');
-        document.getElementById('btnCam').addEventListener('touchstart', (e) => { e.preventDefault(); cycleCamera(); });
-        document.getElementById('btnCam').addEventListener('click', cycleCamera);
-    }
-
-    function onWindowResize() {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    }
-
-    function onKeyDown(e) {
-        keys[e.code] = true;
-        if (e.code === 'Escape') { if (gameState === 'playing') pauseGame(); else if (gameState === 'paused') resumeGame(); }
-        if (e.code === 'KeyC') cycleCamera();
-        if (e.code === 'KeyR') resetCar();
-        if (e.code === 'KeyN') activateNitro();
-    }
-
-    function onKeyUp(e) { keys[e.code] = false; }
-
-    function startGame() {
-        document.getElementById('mainMenu').classList.add('hidden');
-        document.getElementById('hud').classList.add('active');
-        gameState = 'playing';
-        if (settings.sound) initAudio();
-        showNotification('Serbest Surus Modu - WASD ile sur, C ile kamera degistir');
-    }
-
-    function pauseGame() { gameState = 'paused'; document.getElementById('pauseMenu').classList.add('active'); }
-    function resumeGame() { gameState = 'playing'; document.getElementById('pauseMenu').classList.remove('active'); }
-
-    function backToMenu() {
-        gameState = 'menu';
-        document.getElementById('pauseMenu').classList.remove('active');
-        document.getElementById('hud').classList.remove('active');
-        document.getElementById('mainMenu').classList.remove('hidden');
-        resetCar();
-    }
-
-    function resetCar() {
-        car.position.set(0, 0, 0); car.rotation.set(0, 0, 0);
-        carVelocity.set(0, 0, 0); speed = 0; steeringAngle = 0; damage = 0; nitroAmount = 100;
-        document.getElementById('pauseMenu').classList.remove('active');
-        showNotification('Araba sifirlandi!');
-    }
-
-    function showSettings() { document.getElementById('settingsMenu').classList.add('active'); }
-    function hideSettings() { document.getElementById('settingsMenu').classList.remove('active'); }
-    function showControls() { document.getElementById('controlsMenu').classList.add('active'); }
-    function hideControls() { document.getElementById('controlsMenu').classList.remove('active'); }
-
-    function cycleQuality() {
-        const q = ['Dusuk', 'Orta', 'Yuksek'];
-        const c = q.indexOf(document.getElementById('qualitySetting').textContent);
-        const n = (c + 1) % q.length;
-        document.getElementById('qualitySetting').textContent = q[n];
-        settings.quality = q[n].toLowerCase();
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, settings.quality === 'yuksek' ? 2 : 1));
-        renderer.antialias = settings.quality === 'yuksek';
-    }
-
-    function toggleShadows() {
-        const c = document.getElementById('shadowSetting').textContent;
-        const n = c === 'Acik' ? 'Kapali' : 'Acik';
-        document.getElementById('shadowSetting').textContent = n;
-        settings.shadows = n === 'Acik';
-        renderer.shadowMap.enabled = settings.shadows;
-    }
-
-    function toggleSound() {
-        const c = document.getElementById('soundSetting').textContent;
-        const n = c === 'Acik' ? 'Kapali' : 'Acik';
-        document.getElementById('soundSetting').textContent = n;
-        settings.sound = n === 'Acik';
-    }
-
-    function cycleSensitivity() {
-        const s = ['Dusuk', 'Orta', 'Yuksek'];
-        const c = s.indexOf(document.getElementById('sensSetting').textContent);
-        const n = (c + 1) % s.length;
-        document.getElementById('sensSetting').textContent = s[n];
-        settings.sensitivity = [0.7, 1, 1.3][n];
-    }
-
-    function cycleCamera() {
-        cameraMode = (cameraMode + 1) % 3;
-        const m = ['DIS KAMERA', 'IC KAMERA', 'UST KAMERA'];
-        document.getElementById('camIndicator').textContent = m[cameraMode];
-    }
-
-    function activateNitro() {
-        if (nitroAmount > 0 && speed > 20) {
-            nitroAmount = Math.max(0, nitroAmount - 20);
-            speed = Math.min(MAX_SPEED, speed + 50);
-            showNotification('NITRO!');
-            for (let i = 0; i < 10; i++) createParticle(car.position.x + (Math.random() - 0.5) * 2, car.position.y + 0.5, car.position.z - 2, 0xff6600);
-        }
-    }
-
-    function showNotification(text) {
-        const n = document.getElementById('notification');
-        n.textContent = text; n.classList.add('show');
-        setTimeout(() => n.classList.remove('show'), 3000);
-    }
-
-    function initAudio() {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (engineOscillator) return;
-        engineOscillator = audioCtx.createOscillator();
-        engineGain = audioCtx.createGain();
-        engineOscillator.type = 'sawtooth';
-        engineOscillator.frequency.value = 80;
-        engineGain.gain.value = 0.05;
-        const filter = audioCtx.createBiquadFilter();
-        filter.type = 'lowpass'; filter.frequency.value = 400;
-        engineOscillator.connect(filter); filter.connect(engineGain); engineGain.connect(audioCtx.destination);
-        engineOscillator.start();
-    }
-
-    function updateEngineSound() {
-        if (!engineOscillator || !settings.sound) return;
-        const ns = Math.abs(speed) / MAX_SPEED;
-        engineOscillator.frequency.value = 80 + ns * 300;
-        engineGain.gain.value = Math.abs(speed) > 1 ? 0.03 + ns * 0.08 : 0.01;
-    }
-
-    function updatePhysics() {
-        if (gameState !== 'playing') return;
-        const accel = (keys['KeyW'] || keys['ArrowUp'] || mobileInput.up) ? 1 : 0;
-        const brake = (keys['KeyS'] || keys['ArrowDown'] || mobileInput.down) ? 1 : 0;
-        const left = (keys['KeyA'] || keys['ArrowLeft'] || mobileInput.left) ? 1 : 0;
-        const right = (keys['KeyD'] || keys['ArrowRight'] || mobileInput.right) ? 1 : 0;
-        const handbrake = keys['Space'] || mobileInput.brake;
-        const nitro = keys['KeyN'] || mobileInput.nitro;
-        const ts = (right - left) * MAX_STEERING * settings.sensitivity;
-        steeringAngle += (ts - steeringAngle) * STEERING_SPEED * deltaTime;
-        const forward = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), car.rotation.y);
-        if (nitro && nitroAmount > 0) activateNitro();
-        if (accel > 0) speed += ACCELERATION * deltaTime;
-        else if (brake > 0) speed -= BRAKING * deltaTime;
-        else speed *= FRICTION;
-        if (handbrake) { speed *= 0.95; isDrifting = Math.abs(speed) > 30; }
-        else isDrifting = false;
-        speed = Math.max(-MAX_SPEED/3, Math.min(MAX_SPEED, speed));
-        if (Math.abs(speed) < 0.5) speed = 0;
-        carVelocity.copy(forward).multiplyScalar(speed * deltaTime);
-        car.position.add(carVelocity);
-        if (Math.abs(speed) > 1) car.rotation.y += steeringAngle * speed * 0.02 * deltaTime;
-        if (isDrifting && Math.abs(speed) > 40) {
-            driftTime += deltaTime;
-            if (Math.random() > 0.7) createSkidMark(car.position.x + (Math.random() - 0.5), car.position.z - 1.5);
-            if (Math.random() > 0.5) createParticle(car.position.x + (Math.random() - 0.5) * 2, 0.2, car.position.z - 1.5, 0xaaaaaa);
-        } else driftTime = Math.max(0, driftTime - deltaTime);
-        if (!nitro && nitroAmount < 100) nitroAmount = Math.min(100, nitroAmount + 5 * deltaTime);
-        wheels.forEach((w, i) => { if (i < 2) w.rotation.y = steeringAngle * 0.5; w.children[0].rotation.x += speed * deltaTime * 0.5; });
-        const bound = CITY_SIZE/2 - 10;
-        if (car.position.x < -bound) { car.position.x = -bound; speed *= -0.5; }
-        if (car.position.x > bound) { car.position.x = bound; speed *= -0.5; }
-        if (car.position.z < -bound) { car.position.z = -bound; speed *= -0.5; }
-        if (car.position.z > bound) { car.position.z = bound; speed *= -0.5; }
-        updateEngineSound(); updateGear();
-    }
-
-    function updateGear() {
-        const as = Math.abs(speed);
-        if (as < 1) gear = 0;
-        else if (as < 30) gear = 1;
-        else if (as < 60) gear = 2;
-        else if (as < 100) gear = 3;
-        else if (as < 150) gear = 4;
-        else gear = 5;
-        document.getElementById('gearDisplay').textContent = gear === 0 ? 'N' : (speed < 0 ? 'R' : gear);
-    }
-
-    function updateCamera() {
-        if (!car) return;
-        const cp = car.position.clone(), cr = car.rotation.y;
-        let tp, la;
-        if (cameraMode === 0) {
-            const o = new THREE.Vector3(0, 5, -10); o.applyAxisAngle(new THREE.Vector3(0, 1, 0), cr);
-            tp = cp.clone().add(o); la = cp.clone().add(new THREE.Vector3(0, 1, 0));
-        } else if (cameraMode === 1) {
-            const o = new THREE.Vector3(0, 1.5, 2); o.applyAxisAngle(new THREE.Vector3(0, 1, 0), cr);
-            tp = cp.clone().add(o); la = cp.clone().add(new THREE.Vector3(0, 1, 10).applyAxisAngle(new THREE.Vector3(0, 1, 0), cr));
-        } else { tp = cp.clone().add(new THREE.Vector3(0, 30, 0)); la = cp.clone(); }
-        cameraPosition.lerp(tp, 5 * deltaTime); cameraTarget.lerp(la, 5 * deltaTime);
-        camera.position.copy(cameraPosition); camera.lookAt(cameraTarget);
-    }
-
-    function createParticle(x, y, z, color) {
-        const m = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.8 }));
-        m.position.set(x, y, z); scene.add(m);
-        particles.push({ mesh: m, life: 1.0, velocity: new THREE.Vector3((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2) });
-    }
-
-    function updateParticles() {
-        for (let i = particles.length - 1; i >= 0; i--) {
-            const p = particles[i]; p.life -= deltaTime * 2;
-            p.mesh.position.add(p.velocity.clone().multiplyScalar(deltaTime));
-            p.mesh.material.opacity = p.life; p.mesh.scale.multiplyScalar(0.98);
-            if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); }
-        }
-    }
-
-    function createSkidMark(x, z) {
-        const m = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 2), new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.5, depthWrite: false }));
-        m.rotation.x = -Math.PI / 2; m.rotation.z = car.rotation.y; m.position.set(x, 0.02, z); scene.add(m);
-        skidMarks.push({ mesh: m, life: 10 });
-        if (skidMarks.length > 100) { const o = skidMarks.shift(); scene.remove(o.mesh); }
-    }
-
-    function updateSkidMarks() {
-        for (let i = skidMarks.length - 1; i >= 0; i--) {
-            skidMarks[i].life -= deltaTime;
-            skidMarks[i].mesh.material.opacity = Math.max(0, skidMarks[i].life / 10 * 0.5);
-            if (skidMarks[i].life <= 0) { scene.remove(skidMarks[i].mesh); skidMarks.splice(i, 1); }
-        }
-    }
-
-    function updateTraffic() {
-        trafficCars.forEach(tc => {
-            const f = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), tc.mesh.rotation.y);
-            tc.mesh.position.add(f.multiplyScalar(tc.speed * deltaTime * tc.direction));
-            const bound = CITY_SIZE/2 - 20;
-            if (tc.mesh.position.x < -bound) tc.mesh.position.x = bound;
-            if (tc.mesh.position.x > bound) tc.mesh.position.x = -bound;
-            if (tc.mesh.position.z < -bound) tc.mesh.position.z = bound;
-            if (tc.mesh.position.z > bound) tc.mesh.position.z = -bound;
-            const dist = tc.mesh.position.distanceTo(car.position);
-            if (dist < 8) tc.speed *= 0.9; else tc.speed += (tc.targetSpeed - tc.speed) * deltaTime;
-        });
-    }
-
-    function updateTrafficLights() {
-        trafficLights.forEach(tl => {
-            tl.timer += deltaTime;
-            if (tl.timer > 10) {
-                tl.timer = 0;
-                if (tl.state === 'green') { tl.state = 'yellow'; tl.green.material.color.setHex(0x004400); tl.yellow.material.color.setHex(0xffff00); tl.red.material.color.setHex(0x440000); }
-                else if (tl.state === 'yellow') { tl.state = 'red'; tl.green.material.color.setHex(0x004400); tl.yellow.material.color.setHex(0x444400); tl.red.material.color.setHex(0xff0000); }
-                else { tl.state = 'green'; tl.green.material.color.setHex(0x00ff00); tl.yellow.material.color.setHex(0x444400); tl.red.material.color.setHex(0x440000); }
-            }
-        });
-    }
-
-    function updateHUD() {
-        const sp = Math.abs(speed) / MAX_SPEED;
-        document.getElementById('speedFill').style.strokeDashoffset = 440 - (sp * 440);
-        document.getElementById('speedText').textContent = Math.floor(Math.abs(speed));
-        document.getElementById('nitroFill').style.width = nitroAmount + '%';
-        document.getElementById('damageFill').style.width = (100 - damage) + '%';
-        document.getElementById('fpsCounter').textContent = 'FPS: ' + Math.floor(fps);
-        updateMinimap();
-    }
-
-    function updateMinimap() {
-        const c = document.getElementById('minimapCanvas');
-        const ctx = c.getContext('2d');
-        const w = c.width, h = c.height;
-        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, w, h);
-        const sc = w / CITY_SIZE;
-        ctx.strokeStyle = 'rgba(100,100,100,0.5)'; ctx.lineWidth = 2;
-        for (let x = -CITY_SIZE/2; x <= CITY_SIZE/2; x += BLOCK_SIZE) {
-            ctx.beginPath(); ctx.moveTo(w/2 + x * sc, 0); ctx.lineTo(w/2 + x * sc, h); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(0, h/2 + x * sc); ctx.lineTo(w, h/2 + x * sc); ctx.stroke();
-        }
-        ctx.fillStyle = 'rgba(255,255,0,0.6)';
-        trafficCars.forEach(tc => { const mx = w/2 + tc.mesh.position.x * sc, my = h/2 + tc.mesh.position.z * sc; ctx.fillRect(mx - 2, my - 2, 4, 4); });
-        const px = w/2 + car.position.x * sc, py = h/2 + car.position.z * sc;
-        ctx.save(); ctx.translate(px, py); ctx.rotate(-car.rotation.y); ctx.fillStyle = '#00d4ff';
-        ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(-4, 4); ctx.lineTo(4, 4); ctx.closePath(); ctx.fill(); ctx.restore();
-    }
-
-    function checkCollisions() {
-        trafficCars.forEach(tc => {
-            const dist = car.position.distanceTo(tc.mesh.position);
-            if (dist < 3.5) {
-                speed *= -0.3; damage = Math.min(100, damage + 5);
-                const pd = car.position.clone().sub(tc.mesh.position).normalize();
-                car.position.add(pd.multiplyScalar(0.5));
-                if (damage > 80) showNotification('Kritik hasar! Arabayi sifirlayin (R)');
-                else if (damage > 50) showNotification('Agir hasar!');
-                for (let i = 0; i < 5; i++) createParticle(car.position.x + (Math.random() - 0.5), 0.5, car.position.z + (Math.random() - 0.5), 0xffaa00);
-            }
-        });
-        parkedCars.forEach(pc => {
-            const dist = car.position.distanceTo(pc.position);
-            if (dist < 3.5) { speed *= -0.4; damage = Math.min(100, damage + 3); const pd = car.position.clone().sub(pc.position).normalize(); car.position.add(pd.multiplyScalar(0.3)); }
-        });
-        buildings.forEach(b => {
-            const dist = car.position.distanceTo(b.position);
-            if (dist < 15) {
-                const dx = Math.abs(car.position.x - b.position.x), dz = Math.abs(car.position.z - b.position.z);
-                const hw = b.geometry.parameters.width / 2 + 1, hd = b.geometry.parameters.depth / 2 + 1;
-                if (dx < hw && dz < hd) {
-                    speed *= -0.5; damage = Math.min(100, damage + 10);
-                    if (car.position.x > b.position.x) car.position.x += 0.5; else car.position.x -= 0.5;
-                    if (car.position.z > b.position.z) car.position.z += 0.5; else car.position.z -= 0.5;
-                    showNotification('Bina ile carpisma!');
-                }
-            }
-        });
-    }
-
-    function animate() {
-        requestAnimationFrame(animate);
-        const now = performance.now();
-        deltaTime = Math.min((now - lastTime) / 1000, 0.1);
-        lastTime = now;
-        frameCount++;
-        if (frameCount % 30 === 0) fps = Math.round(1 / deltaTime);
-        if (gameState === 'playing') {
-            updatePhysics(); updateCamera(); updateTraffic(); updateTrafficLights();
-            updateParticles(); updateSkidMarks(); checkCollisions(); updateHUD();
-        }
-        renderer.render(scene, camera);
-    }
-
-    window.addEventListener('load', init);
-    </script>
+  <script src="game.js"></script>
 </body>
 </html>
