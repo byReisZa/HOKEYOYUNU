@@ -1,87 +1,694 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Neon Sürüş</title>
-  <link rel="stylesheet" href="./style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aliza Racing - İç Kamera</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+        body { overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+
+        /* HUD Overlay */
+        .hud {
+            position: fixed; pointer-events: none; z-index: 10;
+        }
+
+        /* Hız Göstergesi */
+        .speedometer {
+            bottom: 30px; right: 30px; width: 220px; height: 220px;
+        }
+        .speed-gauge {
+            width: 100%; height: 100%; position: relative;
+        }
+        .speed-arc {
+            width: 100%; height: 100%; border-radius: 50%;
+            border: 8px solid rgba(255,255,255,0.1);
+            border-top-color: transparent; border-right-color: transparent;
+            transform: rotate(45deg); position: absolute;
+        }
+        .speed-needle {
+            position: absolute; bottom: 50%; left: 50%; width: 4px; height: 90px;
+            background: linear-gradient(to top, #ff3333, #ff6666);
+            transform-origin: bottom center; transform: translateX(-50%) rotate(-135deg);
+            border-radius: 2px; transition: transform 0.05s linear;
+            box-shadow: 0 0 10px rgba(255,51,51,0.5);
+        }
+        .speed-center {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            text-align: center;
+        }
+        .speed-value {
+            font-size: 48px; font-weight: bold; color: #fff;
+            text-shadow: 0 0 20px rgba(255,255,255,0.3);
+        }
+        .speed-unit { font-size: 14px; color: #aaa; }
+        .speed-label { font-size: 11px; color: #666; margin-top: 2px; }
+
+        /* RPM Göstergesi */
+        .rpm-gauge {
+            bottom: 30px; right: 270px; width: 160px; height: 160px;
+        }
+        .rpm-needle {
+            position: absolute; bottom: 50%; left: 50%; width: 3px; height: 65px;
+            background: linear-gradient(to top, #33ff33, #ffff33, #ff3333);
+            transform-origin: bottom center; transform: translateX(-50%) rotate(-135deg);
+            border-radius: 2px; transition: transform 0.05s linear;
+        }
+        .rpm-value {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 28px; font-weight: bold; color: #fff;
+        }
+        .rpm-label { font-size: 10px; color: #666; text-align: center; margin-top: 40px; }
+
+        /* Vites Göstergesi */
+        .gear-display {
+            bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.7); border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 15px; padding: 15px 30px; text-align: center;
+            backdrop-filter: blur(10px);
+        }
+        .gear-label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 2px; }
+        .gear-value {
+            font-size: 56px; font-weight: bold; color: #fff;
+            text-shadow: 0 0 30px rgba(255,255,255,0.5);
+            transition: all 0.1s;
+        }
+        .gear-value.shift { color: #ff3333; transform: scale(1.2); }
+
+        /* Direksiyon */
+        .steering-wheel {
+            bottom: -180px; left: 50%; transform: translateX(-50%);
+            width: 400px; height: 400px; pointer-events: none;
+        }
+        .wheel {
+            width: 100%; height: 100%; border-radius: 50%;
+            border: 12px solid rgba(40,40,40,0.9);
+            border-top-color: rgba(60,60,60,0.9);
+            position: relative;
+            transform-origin: center; transition: transform 0.05s linear;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8), inset 0 0 20px rgba(0,0,0,0.5);
+        }
+        .wheel::before {
+            content: ''; position: absolute; top: 50%; left: 50%;
+            width: 80px; height: 80px; background: rgba(30,30,30,0.95);
+            transform: translate(-50%, -50%); border-radius: 50%;
+            border: 3px solid rgba(255,255,255,0.1);
+        }
+        .wheel-spoke {
+            position: absolute; top: 0; left: 50%; width: 20px; height: 50%;
+            background: rgba(50,50,50,0.9); transform: translateX(-50%);
+            transform-origin: bottom center;
+        }
+        .wheel-spoke:nth-child(2) { transform: translateX(-50%) rotate(120deg); }
+        .wheel-spoke:nth-child(3) { transform: translateX(-50%) rotate(240deg); }
+
+        /* Pedallar */
+        .pedals {
+            bottom: 20px; left: 30px; display: flex; gap: 15px;
+        }
+        .pedal {
+            width: 60px; height: 90px; border-radius: 10px;
+            background: rgba(40,40,40,0.8); border: 2px solid rgba(255,255,255,0.1);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; color: #666; font-weight: bold;
+            transition: all 0.05s;
+        }
+        .pedal.active {
+            background: rgba(255,255,255,0.15);
+            border-color: rgba(255,255,255,0.4);
+            transform: scale(0.95);
+        }
+        .pedal.gas.active { background: rgba(0,255,0,0.2); border-color: rgba(0,255,0,0.5); }
+        .pedal.brake.active { background: rgba(255,0,0,0.2); border-color: rgba(255,0,0,0.5); }
+        .pedal.clutch.active { background: rgba(0,100,255,0.2); border-color: rgba(0,100,255,0.5); }
+
+        /* Vites Kolu */
+        .shifter {
+            bottom: 40px; right: 500px; width: 80px; height: 120px;
+            background: rgba(20,20,20,0.9); border-radius: 10px;
+            border: 2px solid rgba(255,255,255,0.1); padding: 10px;
+        }
+        .shifter-pattern {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 5px; height: 100%; position: relative;
+        }
+        .gear-slot {
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; color: #444; font-weight: bold;
+            border-radius: 5px; transition: all 0.1s;
+        }
+        .gear-slot.active {
+            background: rgba(255,255,255,0.2); color: #fff;
+            box-shadow: 0 0 15px rgba(255,255,255,0.3);
+        }
+        .gear-slot.neutral {
+            grid-column: 1 / -1; font-size: 12px;
+        }
+
+        /* Minimap */
+        .minimap {
+            top: 30px; right: 30px; width: 180px; height: 180px;
+            background: rgba(0,0,0,0.7); border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 10px; overflow: hidden;
+        }
+        .minimap canvas { width: 100%; height: 100%; }
+
+        /* FPS Counter */
+        .fps-counter {
+            top: 30px; left: 30px; color: #0f0; font-size: 14px;
+            font-family: monospace; background: rgba(0,0,0,0.5);
+            padding: 5px 10px; border-radius: 5px;
+        }
+
+        /* Kontrol Bilgisi */
+        .controls-info {
+            top: 70px; left: 30px; color: #888; font-size: 12px;
+            background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px;
+            line-height: 1.8;
+        }
+        .controls-info span { color: #ccc; font-weight: bold; }
+
+        /* Başlangıç Ekranı */
+        .start-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); display: flex;
+            flex-direction: column; align-items: center; justify-content: center;
+            z-index: 100; transition: opacity 0.5s;
+        }
+        .start-screen h1 {
+            font-size: 64px; color: #fff; margin-bottom: 20px;
+            text-shadow: 0 0 40px rgba(255,255,255,0.3);
+            letter-spacing: 10px;
+        }
+        .start-screen p { color: #888; font-size: 18px; margin-bottom: 40px; }
+        .start-btn {
+            padding: 20px 60px; font-size: 24px; color: #fff;
+            background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 10px; cursor: pointer; transition: all 0.3s;
+            text-transform: uppercase; letter-spacing: 3px;
+        }
+        .start-btn:hover {
+            background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.6);
+            transform: scale(1.05); box-shadow: 0 0 30px rgba(255,255,255,0.2);
+        }
+
+        /* Motor Ses Göstergesi */
+        .engine-vibe {
+            bottom: 260px; right: 30px; width: 220px; height: 6px;
+            background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;
+        }
+        .engine-vibe-fill {
+            height: 100%; width: 0%; background: linear-gradient(90deg, #0f0, #ff0, #f00);
+            border-radius: 3px; transition: width 0.05s linear;
+        }
+
+        /* Vites Değiştirme Uyarısı */
+        .shift-light {
+            bottom: 280px; right: 30px; width: 220px; text-align: center;
+            color: #ff3333; font-size: 14px; font-weight: bold;
+            opacity: 0; transition: opacity 0.1s;
+            text-shadow: 0 0 10px rgba(255,51,51,0.8);
+        }
+        .shift-light.show { opacity: 1; }
+    </style>
+<base target="_blank">
 </head>
 <body>
-  <!-- Cihaz Seçimi -->
-  <div id="device-select">
-    <h1>Neon Sürüş</h1>
-    <p>Oynama şeklini seç</p>
-    <div class="device-btns">
-      <button id="btn-pc">💻 PC (Klavye)</button>
-      <button id="btn-mobile">📱 Mobil (Dokunmatik)</button>
-    </div>
-  </div>
+    <canvas id="gameCanvas"></canvas>
 
-  <!-- Başlangıç Ekranı -->
-  <div id="start" class="hidden">
-    <h1>Neon Sürüş</h1>
-    <p id="controls-hint">W/S: Gaz-Fren, A/D: Direksiyon, Q/E: Vites, Shift: Nitro, C: Kamera</p>
-    <button id="startBtn">Başlat</button>
-  </div>
+    <!-- HUD -->
+    <div class="hud speedometer">
+        <div class="speed-gauge">
+            <div class="speed-arc"></div>
+            <div class="speed-needle" id="speedNeedle"></div>
+            <div class="speed-center">
+                <div class="speed-value" id="speedValue">0</div>
+                <div class="speed-unit">km/h</div>
+                <div class="speed-label">HIZ</div>
+            </div>
+        </div>
+    </div>
 
-  <!-- UI -->
-  <div id="ui" class="hidden">
-    <div class="card">Hız: <span id="speed">0</span> km/sa</div>
-    <div class="card">Vites: <span id="gear">N</span></div>
-    <div class="card">RPM: <span id="rpm">0</span></div>
-    <div class="card">FPS: <span id="fps">0</span></div>
-    <button id="camBtn">Kamera (C)</button>
-  </div>
+    <div class="hud rpm-gauge">
+        <div class="speed-gauge">
+            <div class="speed-arc"></div>
+            <div class="rpm-needle" id="rpmNeedle"></div>
+            <div class="speed-center">
+                <div class="rpm-value" id="rpmValue">0</div>
+                <div class="speed-label" style="margin-top:45px">x1000 RPM</div>
+            </div>
+        </div>
+    </div>
 
-  <!-- İç Kamera Gösterge Paneli -->
-  <div id="dashboard" class="hidden">
-    <div class="dash-gauge">
-      <div class="gauge-needle" id="rpm-needle"></div>
-      <div class="gauge-label">RPM</div>
-      <div class="gauge-value" id="dash-rpm">0</div>
+    <div class="hud gear-display">
+        <div class="gear-label">VİTES</div>
+        <div class="gear-value" id="gearValue">N</div>
     </div>
-    <div class="dash-center">
-      <div class="dash-gear" id="dash-gear">N</div>
-      <div class="dash-kmh" id="dash-kmh">0</div>
-      <div class="dash-unit">km/sa</div>
-    </div>
-    <div class="dash-gauge">
-      <div class="gauge-needle" id="speed-needle"></div>
-      <div class="gauge-label">HIZ</div>
-      <div class="gauge-value" id="dash-speed">0</div>
-    </div>
-  </div>
 
-  <!-- Mobil Kontroller -->
-  <div id="mobile-controls" class="hidden">
-    <div class="mob-left">
-      <button id="btn-left" class="mob-btn">◀</button>
-      <button id="btn-right" class="mob-btn">▶</button>
+    <div class="hud steering-wheel">
+        <div class="wheel" id="steeringWheel">
+            <div class="wheel-spoke"></div>
+            <div class="wheel-spoke"></div>
+            <div class="wheel-spoke"></div>
+        </div>
     </div>
-    <div class="mob-center">
-      <button id="btn-brake" class="mob-btn mob-brake">FREN</button>
-    </div>
-    <div class="mob-right">
-      <button id="btn-gas" class="mob-btn mob-gas">GAZ</button>
-      <button id="btn-nitro" class="mob-btn mob-nitro">NITRO</button>
-    </div>
-  </div>
 
-  <!-- Mobil Vites Kutusu (H-Pattern) -->
-  <div id="gear-shifter" class="hidden">
-    <div class="shifter-title">VİTES</div>
-    <div class="gear-grid">
-      <div class="gear-slot" style="grid-area:r" data-gear="R">R</div>
-      <div class="gear-slot" style="grid-area:n1" data-gear="1">1</div>
-      <div class="gear-slot" style="grid-area:n2" data-gear="2">2</div>
-      <div class="gear-slot" style="grid-area:n3" data-gear="3">3</div>
-      <div class="gear-slot" style="grid-area:n4" data-gear="4">4</div>
-      <div class="gear-slot" style="grid-area:n5" data-gear="5">5</div>
-      <div class="gear-slot" style="grid-area:n6" data-gear="6">6</div>
+    <div class="hud pedals">
+        <div class="pedal clutch" id="pedalClutch">C</div>
+        <div class="pedal brake" id="pedalBrake">B</div>
+        <div class="pedal gas" id="pedalGas">G</div>
     </div>
-    <div id="gear-knob"></div>
-  </div>
 
-  <script type="module" src="./main.js"></script>
+    <div class="hud shifter">
+        <div class="shifter-pattern">
+            <div class="gear-slot" data-gear="1">1</div>
+            <div class="gear-slot" data-gear="2">2</div>
+            <div class="gear-slot" data-gear="3">3</div>
+            <div class="gear-slot" data-gear="4">4</div>
+            <div class="gear-slot" data-gear="5">5</div>
+            <div class="gear-slot" data-gear="6">6</div>
+            <div class="gear-slot neutral active" data-gear="0">N</div>
+        </div>
+    </div>
+
+    <div class="hud minimap">
+        <canvas id="minimapCanvas" width="180" height="180"></canvas>
+    </div>
+
+    <div class="hud fps-counter" id="fpsCounter">FPS: 0</div>
+
+    <div class="hud controls-info">
+        <span>W/S</span> Gaz/Fren &nbsp;|&nbsp; <span>A/D</span> Direksiyon<br>
+        <span>Q</span> Debriyaj &nbsp;|&nbsp; <span>1-6</span> Vites<br>
+        <span>N</span> Boşta &nbsp;|&nbsp; <span>R</span> Geri
+    </div>
+
+    <div class="hud engine-vibe">
+        <div class="engine-vibe-fill" id="engineVibe"></div>
+    </div>
+
+    <div class="hud shift-light" id="shiftLight">VİTES YÜKSEL!</div>
+
+    <!-- Başlangıç Ekranı -->
+    <div class="start-screen" id="startScreen">
+        <h1>ALIZA RACING</h1>
+        <p>İç Kamera Simülasyonu - Manuel Vites</p>
+        <button class="start-btn" id="startBtn">START</button>
+    </div>
+
+    <script>
+        // ============ OYUN MOTORU ============
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        const minimapCanvas = document.getElementById('minimapCanvas');
+        const minimapCtx = minimapCanvas.getContext('2d');
+
+        // Performans optimizasyonu
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Oyun durumu
+        const game = {
+            running: false,
+            lastTime: 0,
+            fps: 0,
+            frameCount: 0,
+            lastFpsTime: 0
+        };
+
+        // Araba fizik değerleri
+        const car = {
+            x: 0, y: 0,
+            angle: 0,
+            speed: 0,
+            maxSpeed: 280,
+            acceleration: 0,
+            rpm: 800,
+            gear: 0, // 0=N, -1=R, 1-6
+            steering: 0,
+            steeringAngle: 0,
+            clutch: false,
+            distance: 0
+        };
+
+        // Vites oranları
+        const gearRatios = {
+            '-1': -3.5,
+            '0': 0,
+            '1': 3.8,
+            '2': 2.2,
+            '3': 1.5,
+            '4': 1.1,
+            '5': 0.85,
+            '6': 0.68
+        };
+
+        // Yol sistemi
+        const road = {
+            width: 1200,
+            segments: [],
+            segmentLength: 200,
+            totalSegments: 2000,
+            curveIntensity: 0
+        };
+
+        // Giriş durumu
+        const keys = {};
+
+        // Yol oluştur
+        function generateRoad() {
+            road.segments = [];
+            let curve = 0;
+            for (let i = 0; i < road.totalSegments; i++) {
+                if (i % 100 === 0) {
+                    curve = (Math.random() - 0.5) * 4;
+                }
+                road.segments.push({
+                    curve: curve,
+                    y: Math.sin(i * 0.02) * 50,
+                    color: i % 2 === 0 ? '#333' : '#3a3a3a'
+                });
+            }
+        }
+
+        // Giriş olayları
+        window.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+
+            // Vites değiştirme
+            if (e.key >= '1' && e.key <= '6') {
+                const newGear = parseInt(e.key);
+                if (car.clutch || car.speed < 5) {
+                    car.gear = newGear;
+                    updateGearDisplay();
+                }
+            }
+            if (e.key.toLowerCase() === 'n') {
+                if (car.clutch || car.speed < 5) {
+                    car.gear = 0;
+                    updateGearDisplay();
+                }
+            }
+            if (e.key.toLowerCase() === 'r') {
+                if (car.clutch || car.speed < 5) {
+                    car.gear = -1;
+                    updateGearDisplay();
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+
+        // HUD güncelleme
+        function updateHUD() {
+            // Hız göstergesi
+            const speedAngle = -135 + (car.speed / car.maxSpeed) * 270;
+            document.getElementById('speedNeedle').style.transform = `translateX(-50%) rotate(${speedAngle}deg)`;
+            document.getElementById('speedValue').textContent = Math.floor(car.speed);
+
+            // RPM göstergesi
+            const rpmRatio = Math.min(car.rpm / 8000, 1);
+            const rpmAngle = -135 + rpmRatio * 270;
+            document.getElementById('rpmNeedle').style.transform = `translateX(-50%) rotate(${rpmAngle}deg)`;
+            document.getElementById('rpmValue').textContent = (car.rpm / 1000).toFixed(1);
+
+            // Direksiyon
+            document.getElementById('steeringWheel').style.transform = `rotate(${car.steeringAngle * 2.5}deg)`;
+
+            // Pedallar
+            document.getElementById('pedalGas').classList.toggle('active', keys['w']);
+            document.getElementById('pedalBrake').classList.toggle('active', keys['s']);
+            document.getElementById('pedalClutch').classList.toggle('active', keys['q']);
+
+            // Motor titreşimi
+            const vibe = (car.rpm / 8000) * 100;
+            document.getElementById('engineVibe').style.width = vibe + '%';
+
+            // Vites yükseltme uyarısı
+            const shiftLight = document.getElementById('shiftLight');
+            if (car.rpm > 6500 && car.gear < 6 && car.gear > 0) {
+                shiftLight.classList.add('show');
+            } else {
+                shiftLight.classList.remove('show');
+            }
+        }
+
+        function updateGearDisplay() {
+            const gearValue = document.getElementById('gearValue');
+            const slots = document.querySelectorAll('.gear-slot');
+
+            gearValue.classList.add('shift');
+            setTimeout(() => gearValue.classList.remove('shift'), 200);
+
+            gearValue.textContent = car.gear === 0 ? 'N' : car.gear === -1 ? 'R' : car.gear;
+
+            slots.forEach(slot => {
+                slot.classList.remove('active');
+                if (parseInt(slot.dataset.gear) === car.gear) {
+                    slot.classList.add('active');
+                }
+            });
+        }
+
+        // Fizik güncelleme
+        function updatePhysics(dt) {
+            // Debriyaj
+            car.clutch = keys['q'];
+
+            // Direksiyon
+            const steerSpeed = 3;
+            if (keys['a']) car.steering = Math.max(car.steering - steerSpeed * dt, -1);
+            else if (keys['d']) car.steering = Math.min(car.steering + steerSpeed * dt, 1);
+            else car.steering *= 0.9;
+
+            car.steeringAngle = car.steering * 45;
+
+            // Gaz ve fren
+            const gearRatio = gearRatios[car.gear] || 0;
+            const maxRpmPerGear = 7000 / (Math.abs(gearRatio) || 1);
+
+            if (keys['w'] && !car.clutch && car.gear !== 0) {
+                car.acceleration = 80 * Math.abs(gearRatio);
+                car.rpm = Math.min(car.rpm + 400 * dt, 8000);
+            } else if (keys['s']) {
+                car.acceleration = -120;
+                car.rpm = Math.max(car.rpm - 300 * dt, 800);
+            } else {
+                car.acceleration = -15; // Sürtünme
+                car.rpm = Math.max(car.rpm - 150 * dt, 800);
+            }
+
+            // Boşta veya debriyajda RPM
+            if (car.gear === 0 || car.clutch) {
+                if (keys['w']) car.rpm = Math.min(car.rpm + 500 * dt, 8000);
+                else car.rpm = Math.max(car.rpm - 200 * dt, 800);
+            } else {
+                // Hıza bağlı RPM
+                const targetRpm = Math.abs(car.speed) * 100 * Math.abs(gearRatio) + 800;
+                if (!keys['w'] && !keys['s']) {
+                    car.rpm += (targetRpm - car.rpm) * 0.1;
+                }
+            }
+
+            // Hız güncelleme
+            car.speed += car.acceleration * dt;
+            car.speed = Math.max(0, Math.min(car.speed, car.maxSpeed));
+
+            // Mesafe
+            car.distance += car.speed * dt * 0.27778;
+
+            // Yol eğrisi etkisi
+            const segmentIndex = Math.floor(car.distance / road.segmentLength) % road.totalSegments;
+            const currentSegment = road.segments[segmentIndex] || { curve: 0 };
+            road.curveIntensity = currentSegment.curve;
+
+            // Araba pozisyonu
+            car.x += car.steering * car.speed * 0.02 * dt;
+            car.x = Math.max(-road.width/2 + 100, Math.min(road.width/2 - 100, car.x));
+        }
+
+        // Render fonksiyonu
+        function render() {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // Gökyüzü
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, w, h);
+
+            // Yıldızlar
+            ctx.fillStyle = '#fff';
+            for (let i = 0; i < 100; i++) {
+                const sx = (i * 137.5 + car.distance * 0.01) % w;
+                const sy = (i * 73.3) % (h * 0.4);
+                ctx.fillRect(sx, sy, 1, 1);
+            }
+
+            // Ufuk çizgisi
+            const horizonY = h * 0.35;
+            ctx.fillStyle = '#0f0f1a';
+            ctx.fillRect(0, horizonY, w, h - horizonY);
+
+            // Yol render
+            const fov = 800;
+            const cameraHeight = 150;
+            const segmentCount = 120;
+
+            for (let i = segmentCount; i >= 0; i--) {
+                const segIndex = (Math.floor(car.distance / road.segmentLength) + i) % road.totalSegments;
+                const segment = road.segments[segIndex];
+                if (!segment) continue;
+
+                const z = i * road.segmentLength;
+                const scale = fov / (fov + z);
+                const nextScale = fov / (fov + z + road.segmentLength);
+
+                const curveX = segment.curve * i * i * 0.5;
+                const nextCurveX = segment.curve * (i + 1) * (i + 1) * 0.5;
+
+                const roadWidth = road.width * scale;
+                const nextRoadWidth = road.width * nextScale;
+
+                const screenY = horizonY + (cameraHeight * scale);
+                const nextScreenY = horizonY + (cameraHeight * nextScale);
+
+                const centerX = w / 2 + curveX - car.x * scale * 0.5;
+                const nextCenterX = w / 2 + nextCurveX - car.x * nextScale * 0.5;
+
+                // Yol yüzeyi
+                ctx.fillStyle = segment.color;
+                ctx.beginPath();
+                ctx.moveTo(centerX - roadWidth / 2, screenY);
+                ctx.lineTo(centerX + roadWidth / 2, screenY);
+                ctx.lineTo(nextCenterX + nextRoadWidth / 2, nextScreenY);
+                ctx.lineTo(nextCenterX - nextRoadWidth / 2, nextScreenY);
+                ctx.closePath();
+                ctx.fill();
+
+                // Şerit çizgileri
+                if (i % 4 === 0) {
+                    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                    const lineWidth = 8 * scale;
+                    ctx.fillRect(centerX - lineWidth / 2, screenY, lineWidth, nextScreenY - screenY);
+                }
+
+                // Kenar çizgileri
+                ctx.fillStyle = '#ff3333';
+                const edgeWidth = 15 * scale;
+                ctx.fillRect(centerX - roadWidth / 2 - edgeWidth, screenY, edgeWidth, nextScreenY - screenY);
+                ctx.fillRect(centerX + roadWidth / 2, screenY, edgeWidth, nextScreenY - screenY);
+            }
+
+            // İç kamera görünümü - Ön cam çerçevesi
+            ctx.strokeStyle = 'rgba(20,20,20,0.9)';
+            ctx.lineWidth = 40;
+            ctx.strokeRect(0, 0, w, h);
+
+            // Torpido görünümü (alt kısım)
+            ctx.fillStyle = 'rgba(15,15,15,0.95)';
+            ctx.fillRect(0, h - 120, w, 120);
+
+            // Torpido detayları
+            ctx.fillStyle = 'rgba(30,30,30,0.8)';
+            ctx.fillRect(w * 0.2, h - 100, w * 0.6, 80);
+
+            // Direksiyon kolonu
+            ctx.fillStyle = 'rgba(25,25,25,0.9)';
+            ctx.fillRect(w / 2 - 30, h - 150, 60, 150);
+
+            // Ayna
+            ctx.fillStyle = 'rgba(10,10,10,0.9)';
+            ctx.fillRect(w / 2 - 150, 20, 300, 80);
+            ctx.strokeStyle = 'rgba(50,50,50,0.8)';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(w / 2 - 150, 20, 300, 80);
+
+            // Minimap render
+            renderMinimap();
+        }
+
+        function renderMinimap() {
+            const mw = minimapCanvas.width;
+            const mh = minimapCanvas.height;
+
+            minimapCtx.fillStyle = 'rgba(0,0,0,0.8)';
+            minimapCtx.fillRect(0, 0, mw, mh);
+
+            // Yol çizimi
+            minimapCtx.strokeStyle = 'rgba(255,255,255,0.3)';
+            minimapCtx.lineWidth = 2;
+            minimapCtx.beginPath();
+
+            const startSeg = Math.floor(car.distance / road.segmentLength);
+            const cx = mw / 2;
+            const cy = mh / 2;
+            let px = cx, py = cy;
+
+            minimapCtx.moveTo(px, py);
+
+            for (let i = 0; i < 50; i++) {
+                const segIdx = (startSeg + i) % road.totalSegments;
+                const seg = road.segments[segIdx];
+                if (!seg) continue;
+
+                px += seg.curve * 3;
+                py -= 3;
+                minimapCtx.lineTo(px, py);
+            }
+            minimapCtx.stroke();
+
+            // Araba pozisyonu
+            minimapCtx.fillStyle = '#0f0';
+            minimapCtx.beginPath();
+            minimapCtx.arc(cx + car.x * 0.1, cy, 4, 0, Math.PI * 2);
+            minimapCtx.fill();
+        }
+
+        // Ana oyun döngüsü
+        function gameLoop(timestamp) {
+            if (!game.running) return;
+
+            const dt = Math.min((timestamp - game.lastTime) / 1000, 0.05);
+            game.lastTime = timestamp;
+
+            // FPS hesaplama
+            game.frameCount++;
+            if (timestamp - game.lastFpsTime >= 1000) {
+                game.fps = game.frameCount;
+                game.frameCount = 0;
+                game.lastFpsTime = timestamp;
+                document.getElementById('fpsCounter').textContent = 'FPS: ' + game.fps;
+            }
+
+            updatePhysics(dt);
+            render();
+            updateHUD();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Başlat
+        document.getElementById('startBtn').addEventListener('click', () => {
+            document.getElementById('startScreen').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('startScreen').style.display = 'none';
+            }, 500);
+
+            generateRoad();
+            game.running = true;
+            game.lastTime = performance.now();
+            game.lastFpsTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        });
+
+        // Pencere boyutu değişimi
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+    </script>
 </body>
 </html>
