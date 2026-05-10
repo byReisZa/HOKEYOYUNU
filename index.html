@@ -1,161 +1,514 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TURBO RUSH - Hill Climb Yarış</title>
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Candy Crush - Sonsuz Mod</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .game-container {
+            text-align: center;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #fff;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .score-board {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 15px;
+        }
+
+        .score-box {
+            background: rgba(255,255,255,0.2);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 10px 25px;
+            color: #fff;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .score-box h3 {
+            font-size: 0.9em;
+            opacity: 0.8;
+            text-transform: uppercase;
+        }
+
+        .score-box .value {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+
+        .grid {
+            width: 400px;
+            height: 400px;
+            display: flex;
+            flex-wrap: wrap;
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 10px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            margin: 0 auto;
+        }
+
+        .grid div {
+            width: 47.5px;
+            height: 47.5px;
+            border-radius: 12px;
+            margin: 1.25px;
+            cursor: grab;
+            transition: transform 0.2s, opacity 0.3s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 28px;
+            user-select: none;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .grid div:active {
+            cursor: grabbing;
+        }
+
+        .grid div:hover {
+            transform: scale(1.05);
+        }
+
+        /* Şeker Renkleri */
+        .candy-red { background: linear-gradient(145deg, #ff6b6b, #ee5a5a); }
+        .candy-yellow { background: linear-gradient(145deg, #ffd93d, #f5c842); }
+        .candy-green { background: linear-gradient(145deg, #6bcb77, #5cb85c); }
+        .candy-blue { background: linear-gradient(145deg, #4d96ff, #3a7bd5); }
+        .candy-purple { background: linear-gradient(145deg, #c084fc, #a855f7); }
+        .candy-orange { background: linear-gradient(145deg, #ff9f43, #f0932b); }
+
+        .candy-red::after { content: "🔴"; }
+        .candy-yellow::after { content: "🟡"; }
+        .candy-green::after { content: "🟢"; }
+        .candy-blue::after { content: "🔵"; }
+        .candy-purple::after { content: "🟣"; }
+        .candy-orange::after { content: "🟠"; }
+
+        .matched {
+            animation: pop 0.3s ease-out;
+            opacity: 0;
+        }
+
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(0); opacity: 0; }
+        }
+
+        .combo-text {
+            position: absolute;
+            color: #ffd700;
+            font-size: 2em;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            pointer-events: none;
+            animation: floatUp 1s ease-out forwards;
+            z-index: 100;
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(0.5); opacity: 0; }
+            20% { transform: translateY(-20px) scale(1.2); opacity: 1; }
+            100% { transform: translateY(-80px) scale(1); opacity: 0; }
+        }
+
+        .instructions {
+            color: rgba(255,255,255,0.8);
+            margin-top: 15px;
+            font-size: 0.95em;
+        }
+
+        /* Mobil Uyumluluk */
+        @media (max-width: 500px) {
+            .grid {
+                width: 320px;
+                height: 320px;
+            }
+            .grid div {
+                width: 37.5px;
+                height: 37.5px;
+                font-size: 22px;
+            }
+            h1 { font-size: 1.8em; }
+        }
+    </style>
 </head>
 <body>
+    <div class="game-container">
+        <h1>🍬 Candy Crush</h1>
+        <div class="score-board">
+            <div class="score-box">
+                <h3>Skor</h3>
+                <div class="value" id="score">0</div>
+            </div>
+            <div class="score-box">
+                <h3>Hamle</h3>
+                <div class="value" id="moves">0</div>
+            </div>
+            <div class="score-box">
+                <h3>Combo</h3>
+                <div class="value" id="combo">0</div>
+            </div>
+        </div>
+        <div class="grid" id="grid"></div>
+        <p class="instructions">Şekerleri sürükleyip komşu hücrelere bırakın. 3+ aynı renk yan yana getirin!</p>
+    </div>
 
-<!-- MENU SCREEN -->
-<div id="menuScreen" class="screen active">
-  <div class="menu-bg">
-    <div class="hill-silhouette"></div>
-  </div>
-  <div class="menu-content">
-    <div class="logo">
-      <span class="logo-turbo">TURBO</span>
-      <span class="logo-rush">RUSH</span>
-    </div>
-    <p class="tagline">Tepeleri Fetheden Sürücü</p>
-    <div class="gold-display menu-gold">
-      <span class="gold-icon">🪙</span>
-      <span id="menuGoldCount">0</span> Altın
-    </div>
-    <div class="menu-buttons">
-      <button class="btn btn-primary" onclick="showGarage()">🚗 GARAJ</button>
-      <button class="btn btn-secondary" onclick="showMapSelect()">🗺️ HARİTA SEÇ</button>
-      <button class="btn btn-play" onclick="startGame()">▶ OYNA</button>
-    </div>
-  </div>
-</div>
+    <script>
+        const grid = document.getElementById('grid');
+        const scoreDisplay = document.getElementById('score');
+        const movesDisplay = document.getElementById('moves');
+        const comboDisplay = document.getElementById('combo');
+        
+        const width = 8;
+        const candyColors = ['candy-red', 'candy-yellow', 'candy-green', 'candy-blue', 'candy-purple', 'candy-orange'];
+        let squares = [];
+        let score = 0;
+        let moves = 0;
+        let combo = 0;
+        let colorBeingDragged;
+        let colorBeingReplaced;
+        let squareIdBeingDragged;
+        let squareIdBeingReplaced;
+        let isProcessing = false;
 
-<!-- GARAGE SCREEN -->
-<div id="garageScreen" class="screen">
-  <div class="screen-header">
-    <button class="back-btn" onclick="showMenu()">← GERİ</button>
-    <h2>GARAJ</h2>
-    <div class="gold-display">🪙 <span id="garageGold">0</span></div>
-  </div>
-  <div class="garage-grid" id="garageGrid"></div>
-</div>
+        // Tahta oluştur
+        function createBoard() {
+            for (let i = 0; i < width * width; i++) {
+                const square = document.createElement('div');
+                square.setAttribute('draggable', true);
+                square.setAttribute('id', i);
+                let randomColor = Math.floor(Math.random() * candyColors.length);
+                square.classList.add(candyColors[randomColor]);
+                grid.appendChild(square);
+                squares.push(square);
+            }
+            // Başlangıçta eşleşme olmaması için kontrol
+            setTimeout(() => {
+                removeInitialMatches();
+            }, 100);
+        }
 
-<!-- MAP SELECT SCREEN -->
-<div id="mapScreen" class="screen">
-  <div class="screen-header">
-    <button class="back-btn" onclick="showMenu()">← GERİ</button>
-    <h2>HARİTA SEÇ</h2>
-    <div class="gold-display">🪙 <span id="mapGold">0</span></div>
-  </div>
-  <div class="map-grid" id="mapGrid"></div>
-</div>
+        // Başlangıç eşleşmelerini temizle
+        function removeInitialMatches() {
+            checkRowForFour();
+            checkColumnForFour();
+            checkRowForThree();
+            checkColumnForThree();
+            moveIntoSquareBelow();
+        }
 
-<!-- GAME SCREEN -->
-<div id="gameScreen" class="screen">
-  <canvas id="gameCanvas"></canvas>
+        // Sürükleme olayları
+        function addDragEvents() {
+            squares.forEach(square => {
+                square.addEventListener('dragstart', dragStart);
+                square.addEventListener('dragend', dragEnd);
+                square.addEventListener('dragover', dragOver);
+                square.addEventListener('dragenter', dragEnter);
+                square.addEventListener('dragleave', dragLeave);
+                square.addEventListener('drop', dragDrop);
+                
+                // Mobil dokunma desteği
+                square.addEventListener('touchstart', touchStart, {passive: false});
+                square.addEventListener('touchmove', touchMove, {passive: false});
+                square.addEventListener('touchend', touchEnd);
+            });
+        }
 
-  <!-- HUD -->
-  <div class="hud">
-    <div class="hud-left">
-      <div class="stat-box">
-        <span class="stat-label">MESAFE</span>
-        <span class="stat-value" id="distanceDisplay">0 m</span>
-      </div>
-      <div class="stat-box">
-        <span class="stat-label">HIZ</span>
-        <span class="stat-value" id="speedDisplay">0 km/h</span>
-      </div>
-    </div>
-    <div class="hud-center">
-      <div class="gold-display hud-gold">
-        🪙 <span id="hudGold">0</span>
-      </div>
-    </div>
-    <div class="hud-right">
-      <div class="fuel-bar-container">
-        <span class="stat-label">YAKIT</span>
-        <div class="fuel-bar"><div class="fuel-fill" id="fuelFill"></div></div>
-      </div>
-      <button class="pause-btn" onclick="togglePause()">⏸</button>
-    </div>
-  </div>
+        function dragStart() {
+            if (isProcessing) return;
+            colorBeingDragged = this.className;
+            squareIdBeingDragged = parseInt(this.id);
+        }
 
-  <!-- GEAR DISPLAY -->
-  <div class="gear-display">
-    <div class="gear-box">
-      <span class="gear-label">VİTES</span>
-      <span class="gear-num" id="gearDisplay">1</span>
-    </div>
-    <div class="rpm-bar-container">
-      <div class="rpm-bar"><div class="rpm-fill" id="rpmFill"></div></div>
-      <span class="rpm-label">RPM</span>
-    </div>
-    <div class="clutch-indicator" id="clutchIndicator">DEBRIYAJ</div>
-  </div>
+        function dragOver(e) {
+            e.preventDefault();
+        }
 
-  <!-- CONTROLS -->
-  <div class="controls">
-    <div class="control-group left-controls">
-      <button class="ctrl-btn gear-btn" id="gearDownBtn" onpointerdown="gearDown()" ontouchstart="gearDown()">
-        <span>−</span><small>VİTES</small>
-      </button>
-      <button class="ctrl-btn clutch-btn" id="clutchBtn"
-        onpointerdown="clutchPress()" onpointerup="clutchRelease()"
-        ontouchstart="clutchPress()" ontouchend="clutchRelease()">
-        <span>DEBRIYAJ</span>
-      </button>
-      <button class="ctrl-btn gear-btn" id="gearUpBtn" onpointerdown="gearUp()" ontouchstart="gearUp()">
-        <span>+</span><small>VİTES</small>
-      </button>
-    </div>
-    <div class="control-group right-controls">
-      <button class="ctrl-btn brake-btn"
-        onpointerdown="startBrake()" onpointerup="stopBrake()"
-        ontouchstart="startBrake()" ontouchend="stopBrake()">
-        ◀ FREN
-      </button>
-      <button class="ctrl-btn gas-btn"
-        onpointerdown="startGas()" onpointerup="stopGas()"
-        ontouchstart="startGas()" ontouchend="stopGas()">
-        GAZ ▶
-      </button>
-    </div>
-  </div>
+        function dragEnter(e) {
+            e.preventDefault();
+        }
 
-  <!-- MILESTONE POPUP -->
-  <div id="milestonePopup" class="milestone-popup hidden">
-    <div class="milestone-inner">
-      <div class="milestone-icon">🏆</div>
-      <div class="milestone-text" id="milestoneText"></div>
-      <div class="milestone-reward" id="milestoneReward"></div>
-    </div>
-  </div>
+        function dragLeave() {
+            // this.style.opacity = '1';
+        }
 
-  <!-- PAUSE MENU -->
-  <div id="pauseMenu" class="overlay hidden">
-    <div class="overlay-box">
-      <h2>DURAKLATILDI</h2>
-      <button class="btn btn-play" onclick="togglePause()">▶ DEVAM</button>
-      <button class="btn btn-secondary" onclick="restartGame()">🔄 YENİDEN</button>
-      <button class="btn btn-secondary" onclick="goToMenu()">🏠 MENÜ</button>
-    </div>
-  </div>
+        function dragDrop() {
+            if (isProcessing) return;
+            colorBeingReplaced = this.className;
+            squareIdBeingReplaced = parseInt(this.id);
+            
+            // Geçerli hamle kontrolü (sadece komşu hücreler)
+            const validMoves = [
+                squareIdBeingDragged - 1,
+                squareIdBeingDragged - width,
+                squareIdBeingDragged + 1,
+                squareIdBeingDragged + width
+            ];
+            const validMove = validMoves.includes(squareIdBeingReplaced);
+            
+            if (validMove) {
+                // Takas yap
+                squares[squareIdBeingDragged].className = colorBeingReplaced;
+                squares[squareIdBeingReplaced].className = colorBeingDragged;
+                
+                // Eşleşme var mı kontrol et
+                setTimeout(() => {
+                    if (!checkForMatches()) {
+                        // Eşleşme yoksa geri al
+                        squares[squareIdBeingDragged].className = colorBeingDragged;
+                        squares[squareIdBeingReplaced].className = colorBeingReplaced;
+                    } else {
+                        moves++;
+                        movesDisplay.innerHTML = moves;
+                        combo = 0;
+                    }
+                }, 100);
+            }
+        }
 
-  <!-- GAME OVER -->
-  <div id="gameOver" class="overlay hidden">
-    <div class="overlay-box">
-      <h2>💥 KAZA!</h2>
-      <div class="result-stats">
-        <div>📏 Mesafe: <strong id="finalDistance">0 m</strong></div>
-        <div>🪙 Kazanılan: <strong id="finalGold">0</strong></div>
-      </div>
-      <button class="btn btn-play" onclick="restartGame()">🔄 YENİDEN</button>
-      <button class="btn btn-secondary" onclick="goToMenu()">🏠 MENÜ</button>
-    </div>
-  </div>
-</div>
+        function dragEnd() {
+            // İşlem tamamlandı
+        }
 
-<script src="game.js"></script>
+        // Mobil dokunma desteği
+        let touchStartId = null;
+        function touchStart(e) {
+            if (isProcessing) return;
+            e.preventDefault();
+            touchStartId = parseInt(this.id);
+            colorBeingDragged = this.className;
+            squareIdBeingDragged = parseInt(this.id);
+        }
+
+        function touchMove(e) {
+            e.preventDefault();
+        }
+
+        function touchEnd(e) {
+            if (isProcessing || touchStartId === null) return;
+            const touch = e.changedTouches[0];
+            const element = document.elementFromPoint(touch.clientX, touch.clientY);
+            if (element && element.classList.contains('candy-red') || 
+                element && (element.parentElement === grid)) {
+                const targetId = parseInt(element.id);
+                if (!isNaN(targetId) && targetId !== touchStartId) {
+                    colorBeingReplaced = element.className;
+                    squareIdBeingReplaced = targetId;
+                    
+                    const validMoves = [
+                        squareIdBeingDragged - 1,
+                        squareIdBeingDragged - width,
+                        squareIdBeingDragged + 1,
+                        squareIdBeingDragged + width
+                    ];
+                    
+                    if (validMoves.includes(squareIdBeingReplaced)) {
+                        squares[squareIdBeingDragged].className = colorBeingReplaced;
+                        squares[squareIdBeingReplaced].className = colorBeingDragged;
+                        
+                        setTimeout(() => {
+                            if (!checkForMatches()) {
+                                squares[squareIdBeingDragged].className = colorBeingDragged;
+                                squares[squareIdBeingReplaced].className = colorBeingReplaced;
+                            } else {
+                                moves++;
+                                movesDisplay.innerHTML = moves;
+                                combo = 0;
+                            }
+                        }, 100);
+                    }
+                }
+            }
+            touchStartId = null;
+        }
+
+        // Eşleşme kontrolü
+        function checkForMatches() {
+            let hasMatch = false;
+            hasMatch = checkRowForFour() || hasMatch;
+            hasMatch = checkColumnForFour() || hasMatch;
+            hasMatch = checkRowForThree() || hasMatch;
+            hasMatch = checkColumnForThree() || hasMatch;
+            return hasMatch;
+        }
+
+        // Satırda 4'lü eşleşme
+        function checkRowForFour() {
+            let found = false;
+            for (let i = 0; i < 60; i++) {
+                let rowOfFour = [i, i + 1, i + 2, i + 3];
+                let decidedColor = squares[i].className;
+                const isBlank = squares[i].className === '';
+                
+                const notValid = [5, 6, 7, 13, 14, 15, 21, 22, 23, 29, 30, 31, 37, 38, 39, 45, 46, 47, 53, 54, 55];
+                if (notValid.includes(i)) continue;
+                
+                if (rowOfFour.every(index => squares[index].className === decidedColor && !isBlank && decidedColor !== '')) {
+                    score += 40;
+                    combo++;
+                    scoreDisplay.innerHTML = score;
+                    comboDisplay.innerHTML = combo;
+                    showCombo(i);
+                    rowOfFour.forEach(index => {
+                        squares[index].className = '';
+                    });
+                    found = true;
+                }
+            }
+            return found;
+        }
+
+        // Sütunda 4'lü eşleşme
+        function checkColumnForFour() {
+            let found = false;
+            for (let i = 0; i < 39; i++) {
+                let columnOfFour = [i, i + width, i + width * 2, i + width * 3];
+                let decidedColor = squares[i].className;
+                const isBlank = squares[i].className === '';
+                
+                if (columnOfFour.every(index => squares[index].className === decidedColor && !isBlank && decidedColor !== '')) {
+                    score += 40;
+                    combo++;
+                    scoreDisplay.innerHTML = score;
+                    comboDisplay.innerHTML = combo;
+                    showCombo(i);
+                    columnOfFour.forEach(index => {
+                        squares[index].className = '';
+                    });
+                    found = true;
+                }
+            }
+            return found;
+        }
+
+        // Satırda 3'lü eşleşme
+        function checkRowForThree() {
+            let found = false;
+            for (let i = 0; i < 61; i++) {
+                let rowOfThree = [i, i + 1, i + 2];
+                let decidedColor = squares[i].className;
+                const isBlank = squares[i].className === '';
+                
+                const notValid = [6, 7, 14, 15, 22, 23, 30, 31, 38, 39, 46, 47, 54, 55];
+                if (notValid.includes(i)) continue;
+                
+                if (rowOfThree.every(index => squares[index].className === decidedColor && !isBlank && decidedColor !== '')) {
+                    score += 30;
+                    combo++;
+                    scoreDisplay.innerHTML = score;
+                    comboDisplay.innerHTML = combo;
+                    showCombo(i);
+                    rowOfThree.forEach(index => {
+                        squares[index].className = '';
+                    });
+                    found = true;
+                }
+            }
+            return found;
+        }
+
+        // Sütunda 3'lü eşleşme
+        function checkColumnForThree() {
+            let found = false;
+            for (let i = 0; i < 47; i++) {
+                let columnOfThree = [i, i + width, i + width * 2];
+                let decidedColor = squares[i].className;
+                const isBlank = squares[i].className === '';
+                
+                if (columnOfThree.every(index => squares[index].className === decidedColor && !isBlank && decidedColor !== '')) {
+                    score += 30;
+                    combo++;
+                    scoreDisplay.innerHTML = score;
+                    comboDisplay.innerHTML = combo;
+                    showCombo(i);
+                    columnOfThree.forEach(index => {
+                        squares[index].className = '';
+                    });
+                    found = true;
+                }
+            }
+            return found;
+        }
+
+        // Boşlukları doldur
+        function moveIntoSquareBelow() {
+            for (let i = 0; i < 55; i++) {
+                if (squares[i + width].className === '') {
+                    squares[i + width].className = squares[i].className;
+                    squares[i].className = '';
+                    const firstRow = [0, 1, 2, 3, 4, 5, 6, 7];
+                    const isFirstRow = firstRow.includes(i);
+                    if (isFirstRow && squares[i].className === '') {
+                        let randomColor = Math.floor(Math.random() * candyColors.length);
+                        squares[i].classList.add(candyColors[randomColor]);
+                    }
+                }
+            }
+            
+            // İlk satır için yeni şekerler
+            for (let i = 0; i < 8; i++) {
+                if (squares[i].className === '') {
+                    let randomColor = Math.floor(Math.random() * candyColors.length);
+                    squares[i].classList.add(candyColors[randomColor]);
+                }
+            }
+        }
+
+        // Combo gösterimi
+        function showCombo(index) {
+            if (combo > 1) {
+                const square = squares[index];
+                const rect = square.getBoundingClientRect();
+                const comboText = document.createElement('div');
+                comboText.classList.add('combo-text');
+                comboText.innerHTML = `🔥 ${combo}x Combo!`;
+                comboText.style.left = rect.left + 'px';
+                comboText.style.top = rect.top + 'px';
+                document.body.appendChild(comboText);
+                setTimeout(() => comboText.remove(), 1000);
+            }
+        }
+
+        // Oyun döngüsü - sonsuz kontrol
+        window.setInterval(function() {
+            checkRowForFour();
+            checkColumnForFour();
+            checkRowForThree();
+            checkColumnForThree();
+            moveIntoSquareBelow();
+        }, 100);
+
+        // Başlat
+        createBoard();
+        addDragEvents();
+    </script>
 </body>
 </html>
