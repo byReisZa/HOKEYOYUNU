@@ -1,104 +1,161 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aliza - Hill Climb Racing Tarzı</title>
-    <link rel="stylesheet" href="style.css">
-<base target="_blank">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TURBO RUSH - Hill Climb Yarış</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="game-container">
-        <canvas id="gameCanvas"></canvas>
 
-        <!-- HUD -->
-        <div id="hud" class="hidden">
-            <div id="top-bar">
-                <div id="coin-display">🪙 <span id="coin-count">0</span></div>
-                <div id="distance-display">📏 <span id="distance">0</span>m</div>
-                <div id="fuel-display">⛽ <span id="fuel">100</span>%</div>
-            </div>
-
-            <div id="controls">
-                <div id="left-controls">
-                    <button id="gas-btn" class="control-btn">🚀 GAZ</button>
-                    <button id="brake-btn" class="control-btn">🛑 FREN</button>
-                </div>
-
-                <div id="right-controls">
-                    <div id="gear-display">Vites: <span id="current-gear">1</span></div>
-                    <button id="gear-up-btn" class="control-btn gear-btn">⬆️ Vites Yükselt</button>
-                    <button id="gear-down-btn" class="control-btn gear-btn">⬇️ Vites Düşür</button>
-                    <div id="clutch-display">Debriyaj: <span id="clutch-status">Bırakıldı</span></div>
-                    <button id="clutch-btn" class="control-btn">🔧 Debriyaj</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Ana Menü -->
-        <div id="main-menu" class="screen">
-            <h1>🏎️ ALIZA</h1>
-            <h2>Hill Climb Racing</h2>
-            <div class="menu-buttons">
-                <button id="play-btn" class="menu-btn">🎮 Oyna</button>
-                <button id="garage-btn" class="menu-btn">🔧 Garaj</button>
-                <button id="maps-btn" class="menu-btn">🗺️ Haritalar</button>
-                <button id="settings-btn" class="menu-btn">⚙️ Ayarlar</button>
-            </div>
-            <div id="menu-coins">🪙 <span id="menu-coin-count">0</span></div>
-        </div>
-
-        <!-- Garaj -->
-        <div id="garage-screen" class="screen hidden">
-            <h2>🔧 Garaj</h2>
-            <div id="car-list"></div>
-            <button id="back-from-garage" class="menu-btn">⬅️ Geri</button>
-        </div>
-
-        <!-- Haritalar -->
-        <div id="maps-screen" class="screen hidden">
-            <h2>🗺️ Haritalar</h2>
-            <div id="map-list"></div>
-            <button id="back-from-maps" class="menu-btn">⬅️ Geri</button>
-        </div>
-
-        <!-- Ayarlar -->
-        <div id="settings-screen" class="screen hidden">
-            <h2>⚙️ Ayarlar</h2>
-            <div class="settings-content">
-                <label>Ses: <input type="range" id="volume" min="0" max="100" value="50"></label>
-                <label>Müzik: <input type="checkbox" id="music-toggle" checked></label>
-                <label>Zorluk: 
-                    <select id="difficulty">
-                        <option value="easy">Kolay</option>
-                        <option value="normal" selected>Normal</option>
-                        <option value="hard">Zor</option>
-                    </select>
-                </label>
-            </div>
-            <button id="back-from-settings" class="menu-btn">⬅️ Geri</button>
-        </div>
-
-        <!-- Oyun Sonu -->
-        <div id="game-over" class="screen hidden">
-            <h2>🏁 Oyun Bitti!</h2>
-            <div id="game-over-stats">
-                <p>Mesafe: <span id="final-distance">0</span>m</p>
-                <p>Toplanan Altın: <span id="final-coins">0</span></p>
-                <p>Ödül: <span id="bonus-coins">0</span> 🪙</p>
-            </div>
-            <button id="restart-btn" class="menu-btn">🔄 Tekrar Oyna</button>
-            <button id="menu-btn" class="menu-btn">🏠 Ana Menü</button>
-        </div>
-
-        <!-- Mesafe Ödülü -->
-        <div id="milestone-popup" class="popup hidden">
-            <h3>🎉 Tebrikler!</h3>
-            <p><span id="milestone-distance">100</span>m geçtin!</p>
-            <p>Ödül: <span id="milestone-reward">50</span> 🪙</p>
-        </div>
+<!-- MENU SCREEN -->
+<div id="menuScreen" class="screen active">
+  <div class="menu-bg">
+    <div class="hill-silhouette"></div>
+  </div>
+  <div class="menu-content">
+    <div class="logo">
+      <span class="logo-turbo">TURBO</span>
+      <span class="logo-rush">RUSH</span>
     </div>
+    <p class="tagline">Tepeleri Fetheden Sürücü</p>
+    <div class="gold-display menu-gold">
+      <span class="gold-icon">🪙</span>
+      <span id="menuGoldCount">0</span> Altın
+    </div>
+    <div class="menu-buttons">
+      <button class="btn btn-primary" onclick="showGarage()">🚗 GARAJ</button>
+      <button class="btn btn-secondary" onclick="showMapSelect()">🗺️ HARİTA SEÇ</button>
+      <button class="btn btn-play" onclick="startGame()">▶ OYNA</button>
+    </div>
+  </div>
+</div>
 
-    <script src="game.js"></script>
+<!-- GARAGE SCREEN -->
+<div id="garageScreen" class="screen">
+  <div class="screen-header">
+    <button class="back-btn" onclick="showMenu()">← GERİ</button>
+    <h2>GARAJ</h2>
+    <div class="gold-display">🪙 <span id="garageGold">0</span></div>
+  </div>
+  <div class="garage-grid" id="garageGrid"></div>
+</div>
+
+<!-- MAP SELECT SCREEN -->
+<div id="mapScreen" class="screen">
+  <div class="screen-header">
+    <button class="back-btn" onclick="showMenu()">← GERİ</button>
+    <h2>HARİTA SEÇ</h2>
+    <div class="gold-display">🪙 <span id="mapGold">0</span></div>
+  </div>
+  <div class="map-grid" id="mapGrid"></div>
+</div>
+
+<!-- GAME SCREEN -->
+<div id="gameScreen" class="screen">
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- HUD -->
+  <div class="hud">
+    <div class="hud-left">
+      <div class="stat-box">
+        <span class="stat-label">MESAFE</span>
+        <span class="stat-value" id="distanceDisplay">0 m</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">HIZ</span>
+        <span class="stat-value" id="speedDisplay">0 km/h</span>
+      </div>
+    </div>
+    <div class="hud-center">
+      <div class="gold-display hud-gold">
+        🪙 <span id="hudGold">0</span>
+      </div>
+    </div>
+    <div class="hud-right">
+      <div class="fuel-bar-container">
+        <span class="stat-label">YAKIT</span>
+        <div class="fuel-bar"><div class="fuel-fill" id="fuelFill"></div></div>
+      </div>
+      <button class="pause-btn" onclick="togglePause()">⏸</button>
+    </div>
+  </div>
+
+  <!-- GEAR DISPLAY -->
+  <div class="gear-display">
+    <div class="gear-box">
+      <span class="gear-label">VİTES</span>
+      <span class="gear-num" id="gearDisplay">1</span>
+    </div>
+    <div class="rpm-bar-container">
+      <div class="rpm-bar"><div class="rpm-fill" id="rpmFill"></div></div>
+      <span class="rpm-label">RPM</span>
+    </div>
+    <div class="clutch-indicator" id="clutchIndicator">DEBRIYAJ</div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="controls">
+    <div class="control-group left-controls">
+      <button class="ctrl-btn gear-btn" id="gearDownBtn" onpointerdown="gearDown()" ontouchstart="gearDown()">
+        <span>−</span><small>VİTES</small>
+      </button>
+      <button class="ctrl-btn clutch-btn" id="clutchBtn"
+        onpointerdown="clutchPress()" onpointerup="clutchRelease()"
+        ontouchstart="clutchPress()" ontouchend="clutchRelease()">
+        <span>DEBRIYAJ</span>
+      </button>
+      <button class="ctrl-btn gear-btn" id="gearUpBtn" onpointerdown="gearUp()" ontouchstart="gearUp()">
+        <span>+</span><small>VİTES</small>
+      </button>
+    </div>
+    <div class="control-group right-controls">
+      <button class="ctrl-btn brake-btn"
+        onpointerdown="startBrake()" onpointerup="stopBrake()"
+        ontouchstart="startBrake()" ontouchend="stopBrake()">
+        ◀ FREN
+      </button>
+      <button class="ctrl-btn gas-btn"
+        onpointerdown="startGas()" onpointerup="stopGas()"
+        ontouchstart="startGas()" ontouchend="stopGas()">
+        GAZ ▶
+      </button>
+    </div>
+  </div>
+
+  <!-- MILESTONE POPUP -->
+  <div id="milestonePopup" class="milestone-popup hidden">
+    <div class="milestone-inner">
+      <div class="milestone-icon">🏆</div>
+      <div class="milestone-text" id="milestoneText"></div>
+      <div class="milestone-reward" id="milestoneReward"></div>
+    </div>
+  </div>
+
+  <!-- PAUSE MENU -->
+  <div id="pauseMenu" class="overlay hidden">
+    <div class="overlay-box">
+      <h2>DURAKLATILDI</h2>
+      <button class="btn btn-play" onclick="togglePause()">▶ DEVAM</button>
+      <button class="btn btn-secondary" onclick="restartGame()">🔄 YENİDEN</button>
+      <button class="btn btn-secondary" onclick="goToMenu()">🏠 MENÜ</button>
+    </div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="gameOver" class="overlay hidden">
+    <div class="overlay-box">
+      <h2>💥 KAZA!</h2>
+      <div class="result-stats">
+        <div>📏 Mesafe: <strong id="finalDistance">0 m</strong></div>
+        <div>🪙 Kazanılan: <strong id="finalGold">0</strong></div>
+      </div>
+      <button class="btn btn-play" onclick="restartGame()">🔄 YENİDEN</button>
+      <button class="btn btn-secondary" onclick="goToMenu()">🏠 MENÜ</button>
+    </div>
+  </div>
+</div>
+
+<script src="game.js"></script>
 </body>
 </html>
