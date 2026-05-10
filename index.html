@@ -1,148 +1,104 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#0a1020">
-  <title>Kentsel Sürüş — 3D (Three.js)</title>
-  <meta name="description" content="GitHub Pages uyumlu, optimize 3D açık dünya araba oyunu.">
-  <!-- Tek CSS: göreli yol Pages için -->
-  <link rel="stylesheet" href="./style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aliza - Hill Climb Racing Tarzı</title>
+    <link rel="stylesheet" href="style.css">
+<base target="_blank">
 </head>
 <body>
-  <!-- Oyun kabuğu: WebGL canvas buraya eklenir -->
-  <div id="app"></div>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
 
-  <!-- Yükleme ekranı -->
-  <div id="screen-loading" class="screen screen-visible" aria-live="polite">
-    <div class="card card-loading">
-      <div class="logo-ring" aria-hidden="true"></div>
-      <h1>Kentsel Sürüş</h1>
-      <p class="muted">Harita, trafik ve post-proses yükleniyor…</p>
-      <div class="progress-wrap">
-        <div id="loading-bar" class="progress-bar" style="width: 0%"></div>
-      </div>
-      <p id="loading-status" class="small">0%</p>
-    </div>
-  </div>
+        <!-- HUD -->
+        <div id="hud" class="hidden">
+            <div id="top-bar">
+                <div id="coin-display">🪙 <span id="coin-count">0</span></div>
+                <div id="distance-display">📏 <span id="distance">0</span>m</div>
+                <div id="fuel-display">⛽ <span id="fuel">100</span>%</div>
+            </div>
 
-  <!-- Başlangıç menüsü -->
-  <div id="screen-start" class="screen">
-    <div class="card">
-      <h1>Kentsel Sürüş</h1>
-      <p class="muted">
-        <strong>WASD</strong> sürüş, <strong>Space</strong> el freni / drift,
-        <strong>Shift</strong> nitro, <strong>C</strong> kamera,
-        <strong>P</strong> duraklat, <strong>R</strong> sıfırlama.
-      </p>
-      <div class="btn-row">
-        <button type="button" id="btn-play" class="btn primary">Serbest Sürüşe Başla</button>
-        <button type="button" id="btn-open-settings-start" class="btn">Ayarlar</button>
-      </div>
-    </div>
-  </div>
+            <div id="controls">
+                <div id="left-controls">
+                    <button id="gas-btn" class="control-btn">🚀 GAZ</button>
+                    <button id="brake-btn" class="control-btn">🛑 FREN</button>
+                </div>
 
-  <!-- Ayarlar -->
-  <div id="screen-settings" class="screen">
-    <div class="card card-wide">
-      <h2>Ayarlar</h2>
-      <div class="field">
-        <label for="set-quality">Grafik kalitesi</label>
-        <select id="set-quality">
-          <option value="low">Düşük (60 FPS hedefi)</option>
-          <option value="medium" selected>Orta</option>
-          <option value="high">Yüksek (bloom + SSAO)</option>
-        </select>
-      </div>
-      <div class="field inline">
-        <label>
-          <input type="checkbox" id="set-mobile-mode"> Mobil performans modu
-        </label>
-        <span class="hint">Gölgeler, mesafe ve efektler kısılır.</span>
-      </div>
-      <div class="field inline">
-        <label>
-          <input type="checkbox" id="set-ssao" checked> Hafif SSAO (yüksek kalitede)
-        </label>
-      </div>
-      <div class="btn-row">
-        <button type="button" id="btn-settings-back" class="btn">Geri</button>
-        <button type="button" id="btn-settings-save" class="btn primary">Kaydet</button>
-      </div>
-    </div>
-  </div>
+                <div id="right-controls">
+                    <div id="gear-display">Vites: <span id="current-gear">1</span></div>
+                    <button id="gear-up-btn" class="control-btn gear-btn">⬆️ Vites Yükselt</button>
+                    <button id="gear-down-btn" class="control-btn gear-btn">⬇️ Vites Düşür</button>
+                    <div id="clutch-display">Debriyaj: <span id="clutch-status">Bırakıldı</span></div>
+                    <button id="clutch-btn" class="control-btn">🔧 Debriyaj</button>
+                </div>
+            </div>
+        </div>
 
-  <!-- HUD (oyun içi) -->
-  <div id="hud" class="hud hidden">
-    <div class="hud-left">
-      <div class="gauge">
-        <span class="label">Hız</span>
-        <div id="hud-speed" class="big">0 <span class="unit">km/h</span></div>
-      </div>
-      <div class="gauge">
-        <span class="label">Nitro</span>
-        <div class="nitro-bar"><div id="hud-nitro-fill" class="nitro-fill"></div></div>
-      </div>
-      <div class="gauge small">
-        <span class="label">Hasar</span>
-        <div id="hud-damage" class="damage-text">0%</div>
-      </div>
-    </div>
-    <div class="hud-right">
-      <div class="gauge small align-right">
-        <span class="label">FPS</span>
-        <div id="hud-fps" class="mono">0</div>
-      </div>
-      <canvas id="minimap" width="180" height="180" aria-label="Mini harita"></canvas>
-    </div>
-    <div class="hud-bottom">
-      <div id="mission-box" class="mission">
-        <span class="mission-label">Görev</span>
-        <span id="mission-text">Serbest sürüş — şehri keşfedin.</span>
-      </div>
-    </div>
-    <div class="hud-actions">
-      <button type="button" id="btn-pause" class="btn tiny">Duraklat (P)</button>
-      <button type="button" id="btn-camera" class="btn tiny">Kamera (C)</button>
-      <button type="button" id="btn-reset" class="btn tiny">Sıfırla (R)</button>
-    </div>
-  </div>
+        <!-- Ana Menü -->
+        <div id="main-menu" class="screen">
+            <h1>🏎️ ALIZA</h1>
+            <h2>Hill Climb Racing</h2>
+            <div class="menu-buttons">
+                <button id="play-btn" class="menu-btn">🎮 Oyna</button>
+                <button id="garage-btn" class="menu-btn">🔧 Garaj</button>
+                <button id="maps-btn" class="menu-btn">🗺️ Haritalar</button>
+                <button id="settings-btn" class="menu-btn">⚙️ Ayarlar</button>
+            </div>
+            <div id="menu-coins">🪙 <span id="menu-coin-count">0</span></div>
+        </div>
 
-  <!-- Duraklatma -->
-  <div id="screen-pause" class="screen">
-    <div class="card">
-      <h2>Duraklatıldı</h2>
-      <p class="muted">Devam etmek için butona basın veya P tuşuna tekrar basın.</p>
-      <div class="btn-row">
-        <button type="button" id="btn-resume" class="btn primary">Devam</button>
-        <button type="button" id="btn-settings-pause" class="btn">Ayarlar</button>
-      </div>
-    </div>
-  </div>
+        <!-- Garaj -->
+        <div id="garage-screen" class="screen hidden">
+            <h2>🔧 Garaj</h2>
+            <div id="car-list"></div>
+            <button id="back-from-garage" class="menu-btn">⬅️ Geri</button>
+        </div>
 
-  <!-- Mobil: sanal joystick + gaz/fren -->
-  <div id="touch-ui" class="touch-ui" aria-hidden="true">
-    <div id="joystick-zone" class="joystick-zone">
-      <div id="joystick-knob" class="joystick-knob"></div>
-      <span class="joystick-hint">Direksiyon</span>
-    </div>
-    <div class="touch-pedals">
-      <button type="button" class="pedal" data-code="KeyS">Fren</button>
-      <button type="button" class="pedal" data-code="KeyW">Gaz</button>
-      <button type="button" class="pedal small" data-code="Space">El freni</button>
-      <button type="button" class="pedal small" data-code="ShiftLeft">Nitro</button>
-    </div>
-  </div>
+        <!-- Haritalar -->
+        <div id="maps-screen" class="screen hidden">
+            <h2>🗺️ Haritalar</h2>
+            <div id="map-list"></div>
+            <button id="back-from-maps" class="menu-btn">⬅️ Geri</button>
+        </div>
 
-  <!-- Three.js + eklentiler: modül CDN -->
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
-    }
-  }
-  </script>
-  <script type="module" src="./game.js"></script>
+        <!-- Ayarlar -->
+        <div id="settings-screen" class="screen hidden">
+            <h2>⚙️ Ayarlar</h2>
+            <div class="settings-content">
+                <label>Ses: <input type="range" id="volume" min="0" max="100" value="50"></label>
+                <label>Müzik: <input type="checkbox" id="music-toggle" checked></label>
+                <label>Zorluk: 
+                    <select id="difficulty">
+                        <option value="easy">Kolay</option>
+                        <option value="normal" selected>Normal</option>
+                        <option value="hard">Zor</option>
+                    </select>
+                </label>
+            </div>
+            <button id="back-from-settings" class="menu-btn">⬅️ Geri</button>
+        </div>
+
+        <!-- Oyun Sonu -->
+        <div id="game-over" class="screen hidden">
+            <h2>🏁 Oyun Bitti!</h2>
+            <div id="game-over-stats">
+                <p>Mesafe: <span id="final-distance">0</span>m</p>
+                <p>Toplanan Altın: <span id="final-coins">0</span></p>
+                <p>Ödül: <span id="bonus-coins">0</span> 🪙</p>
+            </div>
+            <button id="restart-btn" class="menu-btn">🔄 Tekrar Oyna</button>
+            <button id="menu-btn" class="menu-btn">🏠 Ana Menü</button>
+        </div>
+
+        <!-- Mesafe Ödülü -->
+        <div id="milestone-popup" class="popup hidden">
+            <h3>🎉 Tebrikler!</h3>
+            <p><span id="milestone-distance">100</span>m geçtin!</p>
+            <p>Ödül: <span id="milestone-reward">50</span> 🪙</p>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
 </body>
 </html>
