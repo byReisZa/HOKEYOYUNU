@@ -1,441 +1,382 @@
-/* Kentsel Sürüş — global stiller; düşük karmaşıklık, mobil öncelikli */
-
-:root {
-  --bg: #060a12;
-  --panel: rgba(14, 22, 36, 0.78);
-  --border: rgba(255, 255, 255, 0.12);
-  --text: #e8f4ff;
-  --muted: rgba(232, 244, 255, 0.66);
-  --accent: #5ecbff;
-  --accent2: #7cff9a;
-  --danger: #ff5c6c;
-}
-
 * {
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
-html,
 body {
-  margin: 0;
-  height: 100%;
-  overflow: hidden;
-  background: var(--bg);
-  color: var(--text);
-  font-family: "Segoe UI", system-ui, "Inter", Roboto, sans-serif;
+    overflow: hidden;
+    background: #1a1a2e;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: white;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
-/* WebGL canvas tam ekran */
-#app {
-  position: fixed;
-  inset: 0;
+#game-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
 }
 
-#app canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
+#gameCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
 }
 
-/* Tam ekran katmanlar */
+/* Ekranlar */
 .screen {
-  position: fixed;
-  inset: 0;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 20;
-  background: radial-gradient(circle at 50% 40%, rgba(20, 40, 70, 0.45), rgba(4, 8, 16, 0.92));
-  padding: 16px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(26, 26, 46, 0.95);
+    transition: opacity 0.3s;
 }
 
-.screen-visible {
-  display: flex;
+.hidden {
+    display: none !important;
 }
 
-.card {
-  width: min(520px, 100%);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 24px 26px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+/* Ana Menü */
+#main-menu h1 {
+    font-size: 4rem;
+    color: #f39c12;
+    text-shadow: 0 0 20px rgba(243, 156, 18, 0.5);
+    margin-bottom: 0.5rem;
+    animation: pulse 2s infinite;
 }
 
-.card-wide {
-  width: min(560px, 100%);
+#main-menu h2 {
+    font-size: 1.5rem;
+    color: #ecf0f1;
+    margin-bottom: 2rem;
+    opacity: 0.8;
 }
 
-.card h1,
-.card h2 {
-  margin: 0 0 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
 }
 
-.muted {
-  color: var(--muted);
-  line-height: 1.55;
-  margin: 0 0 18px;
-  font-size: 0.95rem;
+.menu-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    width: 300px;
 }
 
-.small {
-  font-size: 0.85rem;
-  margin: 8px 0 0;
-  color: var(--muted);
+.menu-btn {
+    padding: 1rem 2rem;
+    font-size: 1.2rem;
+    border: none;
+    border-radius: 15px;
+    background: #e74c3c;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: bold;
+    box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
 }
 
-.btn-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 8px;
+.menu-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(231, 76, 60, 0.4);
+    background: #c0392b;
 }
 
-.btn {
-  border: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(60, 110, 160, 0.35), rgba(12, 18, 30, 0.9));
-  color: var(--text);
-  border-radius: 12px;
-  padding: 12px 18px;
-  font-weight: 600;
-  cursor: pointer;
+.menu-btn:active {
+    transform: translateY(0);
 }
 
-.btn:hover {
-  filter: brightness(1.08);
-}
-
-.btn.primary {
-  border-color: rgba(94, 203, 255, 0.45);
-  background: linear-gradient(180deg, rgba(94, 203, 255, 0.35), rgba(20, 40, 70, 0.95));
-}
-
-.btn.tiny {
-  padding: 8px 12px;
-  font-size: 12px;
-  border-radius: 10px;
-}
-
-/* Yükleme */
-.card-loading {
-  text-align: center;
-}
-
-.logo-ring {
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 14px;
-  border-radius: 50%;
-  border: 3px solid rgba(255, 255, 255, 0.12);
-  border-top-color: var(--accent);
-  animation: spin 0.9s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.progress-wrap {
-  height: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  overflow: hidden;
-  margin-top: 14px;
-}
-
-.progress-bar {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, var(--accent), var(--accent2));
-  border-radius: 6px;
-  transition: width 0.2s ease;
-}
-
-/* Form alanları */
-.field {
-  margin-bottom: 16px;
-}
-
-.field label {
-  display: block;
-  font-size: 0.85rem;
-  margin-bottom: 6px;
-  opacity: 0.9;
-}
-
-.field select {
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: rgba(8, 12, 22, 0.9);
-  color: var(--text);
-}
-
-.field.inline {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.field.inline label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.hint {
-  font-size: 0.8rem;
-  color: var(--muted);
+#menu-coins {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    font-size: 1.5rem;
+    background: rgba(0,0,0,0.5);
+    padding: 10px 20px;
+    border-radius: 25px;
 }
 
 /* HUD */
-.hud {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 10;
+#hud {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 5;
+    pointer-events: none;
 }
 
-.hud.hidden {
-  display: none;
+#hud > * {
+    pointer-events: auto;
 }
 
-.hud-left {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+#top-bar {
+    display: flex;
+    justify-content: space-around;
+    padding: 10px;
+    background: rgba(0,0,0,0.6);
+    font-size: 1.2rem;
+    font-weight: bold;
 }
 
-.hud-right {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
+#top-bar > div {
+    background: rgba(255,255,255,0.1);
+    padding: 8px 15px;
+    border-radius: 20px;
 }
 
-.hud-bottom {
-  position: absolute;
-  left: 50%;
-  bottom: 14px;
-  transform: translateX(-50%);
-  max-width: min(92vw, 480px);
+#controls {
+    position: absolute;
+    bottom: 20px;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 20px;
 }
 
-.hud-actions {
-  position: absolute;
-  bottom: 14px;
-  left: 14px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  pointer-events: auto;
-}
-
-.gauge {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 10px 14px;
-  backdrop-filter: blur(8px);
-}
-
-.gauge.small {
-  padding: 8px 12px;
-}
-
-.gauge .label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
-  opacity: 0.75;
-}
-
-.big {
-  font-size: clamp(26px, 5vw, 34px);
-  font-weight: 800;
-}
-
-.unit {
-  font-size: 12px;
-  font-weight: 600;
-  opacity: 0.75;
-}
-
-.align-right {
-  text-align: right;
-}
-
-.mono {
-  font-variant-numeric: tabular-nums;
-  font-size: 20px;
-}
-
-.nitro-bar {
-  width: 140px;
-  height: 10px;
-  background: rgba(0, 0, 0, 0.35);
-  border-radius: 8px;
-  overflow: hidden;
-  margin-top: 6px;
-  transform: translateZ(0);
-}
-
-.nitro-fill {
-  height: 100%;
-  width: 100%;
-  background: linear-gradient(90deg, #3ad1ff, #9fff7a);
-  transform-origin: left center;
-  transform: scaleX(1);
-  will-change: transform;
-}
-
-.damage-text {
-  font-weight: 700;
-  color: var(--accent2);
-}
-
-#minimap {
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: rgba(4, 8, 14, 0.55);
-  image-rendering: pixelated;
-}
-
-.mission {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 10px 14px;
-  text-align: center;
-  backdrop-filter: blur(6px);
-}
-
-.mission-label {
-  display: block;
-  font-size: 11px;
-  letter-spacing: 1px;
-  opacity: 0.7;
-  margin-bottom: 4px;
-}
-
-#mission-text {
-  font-size: 0.95rem;
-}
-
-/* Dokunmatik kontroller */
-.touch-ui {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 12;
-  display: none;
-}
-
-.touch-ui.active {
-  display: block;
-}
-
-.joystick-zone {
-  position: absolute;
-  left: 16px;
-  bottom: 100px;
-  width: 130px;
-  height: 130px;
-  border-radius: 50%;
-  background: rgba(12, 18, 32, 0.38);
-  border: 1px solid var(--border);
-  pointer-events: auto;
-  touch-action: none;
-}
-
-.joystick-knob {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 52px;
-  height: 52px;
-  margin-left: -26px;
-  margin-top: -26px;
-  border-radius: 50%;
-  background: rgba(94, 203, 255, 0.35);
-  border: 2px solid rgba(255, 255, 255, 0.2);
-}
-
-.joystick-hint {
-  position: absolute;
-  bottom: -22px;
-  left: 0;
-  right: 0;
-  text-align: center;
-  font-size: 11px;
-  opacity: 0.65;
-}
-
-.touch-pedals {
-  position: absolute;
-  right: 14px;
-  bottom: 100px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  pointer-events: auto;
-}
-
-.pedal {
-  min-width: 88px;
-  padding: 14px 10px;
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: rgba(18, 28, 48, 0.8);
-  color: var(--text);
-  font-weight: 700;
-  font-size: 13px;
-}
-
-.pedal.small {
-  grid-column: span 2;
-  padding: 10px;
-  font-size: 12px;
-}
-
-@media (max-width: 900px) {
-  .hud-actions {
-    bottom: auto;
-    top: 120px;
+#left-controls, #right-controls {
+    display: flex;
     flex-direction: column;
-    align-items: flex-start;
-    max-width: 48vw;
-  }
-
-  .touch-ui.active ~ .hud .hud-actions {
-    top: 8px;
-    right: 8px;
-    left: auto;
-    bottom: auto;
-  }
+    gap: 10px;
 }
 
-@media (max-width: 520px) {
-  #minimap {
-    width: 130px;
-    height: 130px;
-  }
+.control-btn {
+    padding: 15px 25px;
+    font-size: 1.1rem;
+    border: none;
+    border-radius: 15px;
+    cursor: pointer;
+    transition: all 0.1s;
+    font-weight: bold;
+    pointer-events: auto;
+    min-width: 140px;
+}
 
-  .joystick-zone {
-    width: 115px;
-    height: 115px;
-    bottom: 88px;
-  }
+#gas-btn {
+    background: #27ae60;
+    color: white;
+    box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
+}
+
+#gas-btn:active, #gas-btn.active {
+    background: #1e8449;
+    transform: scale(0.95);
+}
+
+#brake-btn {
+    background: #e74c3c;
+    color: white;
+    box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
+}
+
+#brake-btn:active, #brake-btn.active {
+    background: #c0392b;
+    transform: scale(0.95);
+}
+
+.gear-btn {
+    background: #3498db;
+    color: white;
+    font-size: 0.9rem;
+    padding: 10px 15px;
+    min-width: 120px;
+}
+
+.gear-btn:active {
+    background: #2980b9;
+    transform: scale(0.95);
+}
+
+#clutch-btn {
+    background: #9b59b6;
+    color: white;
+}
+
+#clutch-btn:active, #clutch-btn.active {
+    background: #8e44ad;
+    transform: scale(0.95);
+}
+
+#gear-display, #clutch-display {
+    background: rgba(0,0,0,0.6);
+    padding: 8px 12px;
+    border-radius: 10px;
+    text-align: center;
+    font-weight: bold;
+}
+
+/* Garaj ve Haritalar */
+#garage-screen, #maps-screen {
+    overflow-y: auto;
+}
+
+#car-list, #map-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: center;
+    padding: 20px;
+    max-width: 800px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.car-card, .map-card {
+    background: rgba(255,255,255,0.1);
+    border-radius: 15px;
+    padding: 20px;
+    width: 200px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 2px solid transparent;
+}
+
+.car-card:hover, .map-card:hover {
+    border-color: #f39c12;
+    transform: translateY(-5px);
+}
+
+.car-card.selected, .map-card.selected {
+    border-color: #27ae60;
+    background: rgba(39, 174, 96, 0.2);
+}
+
+.car-card.locked, .map-card.locked {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.car-preview {
+    width: 100px;
+    height: 60px;
+    margin: 10px auto;
+    background: #34495e;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+}
+
+.car-price, .map-price {
+    color: #f39c12;
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+/* Ayarlar */
+.settings-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 300px;
+    margin: 20px 0;
+}
+
+.settings-content label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1.1rem;
+}
+
+.settings-content input, .settings-content select {
+    padding: 5px 10px;
+    border-radius: 5px;
+    border: none;
+    background: rgba(255,255,255,0.2);
+    color: white;
+}
+
+/* Oyun Sonu */
+#game-over-stats {
+    background: rgba(255,255,255,0.1);
+    padding: 20px 40px;
+    border-radius: 15px;
+    margin: 20px 0;
+    font-size: 1.2rem;
+    line-height: 2;
+}
+
+#game-over-stats span {
+    color: #f39c12;
+    font-weight: bold;
+}
+
+/* Popup */
+.popup {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(243, 156, 18, 0.95);
+    padding: 30px 50px;
+    border-radius: 20px;
+    text-align: center;
+    z-index: 20;
+    animation: popupIn 0.5s ease-out;
+}
+
+@keyframes popupIn {
+    0% { transform: translate(-50%, -50%) scale(0); }
+    80% { transform: translate(-50%, -50%) scale(1.1); }
+    100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+.popup h3 {
+    font-size: 1.8rem;
+    margin-bottom: 10px;
+}
+
+.popup p {
+    font-size: 1.2rem;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(0,0,0,0.2);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #f39c12;
+    border-radius: 4px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    #main-menu h1 {
+        font-size: 2.5rem;
+    }
+
+    .control-btn {
+        padding: 12px 18px;
+        font-size: 0.9rem;
+        min-width: 100px;
+    }
+
+    #controls {
+        padding: 0 10px;
+    }
 }
