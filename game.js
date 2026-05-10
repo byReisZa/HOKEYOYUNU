@@ -1,1214 +1,1128 @@
-// ===================== ALIZA - HILL CLIMB RACING =====================
+// ============================================================
+//  TURBO RUSH - Hill Climb Racing Style Game
+//  game.js
+// ============================================================
 
-// Canvas ve Context
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+// ===== SAVE SYSTEM =====
+function save() {
+  localStorage.setItem('turboRush', JSON.stringify({
+    gold: player.gold,
+    ownedCars: player.ownedCars,
+    ownedMaps: player.ownedMaps,
+    selectedCar: player.selectedCar,
+    selectedMap: player.selectedMap,
+  }));
+}
+function load() {
+  const d = localStorage.getItem('turboRush');
+  if (d) {
+    const s = JSON.parse(d);
+    player.gold = s.gold || 0;
+    player.ownedCars = s.ownedCars || ['jeep'];
+    player.ownedMaps = s.ownedMaps || ['hills'];
+    player.selectedCar = s.selectedCar || 'jeep';
+    player.selectedMap = s.selectedMap || 'hills';
+  }
+}
 
-// Oyun Değişkenleri
-let gameRunning = false;
-let animationId;
-let lastTime = 0;
-
-// Fizik Sabitleri
-const GRAVITY = 0.5;
-const FRICTION = 0.98;
-const AIR_RESISTANCE = 0.995;
-
-// Oyun Durumu
-const gameState = {
-    coins: parseInt(localStorage.getItem('aliza_coins')) || 0,
-    totalDistance: parseInt(localStorage.getItem('aliza_distance')) || 0,
-    ownedCars: JSON.parse(localStorage.getItem('aliza_cars')) || ['jeep'],
-    ownedMaps: JSON.parse(localStorage.getItem('aliza_maps')) || ['hills'],
-    currentCar: localStorage.getItem('aliza_currentCar') || 'jeep',
-    currentMap: localStorage.getItem('aliza_currentMap') || 'hills',
-    settings: JSON.parse(localStorage.getItem('aliza_settings')) || {
-        volume: 50,
-        music: true,
-        difficulty: 'normal'
-    }
+// ===== PLAYER DATA =====
+const player = {
+  gold: 0,
+  ownedCars: ['jeep'],
+  ownedMaps: ['hills'],
+  selectedCar: 'jeep',
+  selectedMap: 'hills',
 };
 
-// Araba Verileri
-const cars = {
-    jeep: {
-        name: 'Jeep',
-        emoji: '🚙',
-        price: 0,
-        maxSpeed: 15,
-        acceleration: 0.3,
-        grip: 0.8,
-        fuelCapacity: 100,
-        fuelConsumption: 0.15,
-        power: 0.4,
-        color: '#27ae60',
-        width: 70,
-        height: 35,
-        wheelRadius: 12,
-        mass: 1
-    },
-    monster: {
-        name: 'Canavar Kamyon',
-        emoji: '🚛',
-        price: 500,
-        maxSpeed: 12,
-        acceleration: 0.25,
-        grip: 0.9,
-        fuelCapacity: 150,
-        fuelConsumption: 0.2,
-        power: 0.6,
-        color: '#e74c3c',
-        width: 90,
-        height: 45,
-        wheelRadius: 16,
-        mass: 1.5
-    },
-    sport: {
-        name: 'Spor Araba',
-        emoji: '🏎️',
-        price: 1000,
-        maxSpeed: 25,
-        acceleration: 0.5,
-        grip: 0.6,
-        fuelCapacity: 80,
-        fuelConsumption: 0.25,
-        power: 0.5,
-        color: '#3498db',
-        width: 65,
-        height: 25,
-        wheelRadius: 10,
-        mass: 0.8
-    },
-    tank: {
-        name: 'Tank',
-        emoji: '🪖',
-        price: 2000,
-        maxSpeed: 8,
-        acceleration: 0.15,
-        grip: 1.0,
-        fuelCapacity: 200,
-        fuelConsumption: 0.3,
-        power: 0.8,
-        color: '#2c3e50',
-        width: 100,
-        height: 40,
-        wheelRadius: 14,
-        mass: 2
-    },
-    hover: {
-        name: 'Hover Araba',
-        emoji: '🛸',
-        price: 5000,
-        maxSpeed: 20,
-        acceleration: 0.4,
-        grip: 0.5,
-        fuelCapacity: 120,
-        fuelConsumption: 0.1,
-        power: 0.45,
-        color: '#9b59b6',
-        width: 75,
-        height: 30,
-        wheelRadius: 0,
-        mass: 0.9
-    }
-};
+// ===== CAR DEFINITIONS =====
+const CARS = [
+  {
+    id: 'jeep', name: 'JEEP', price: 0, emoji: '🚙',
+    color: '#4CAF50', bodyH: 32, bodyW: 80,
+    maxGears: 4, torque: 1.0, topSpeed: 280, mass: 1.2,
+    fuelCap: 100, fuelRate: 0.04,
+    description: 'Başlangıç aracı',
+  },
+  {
+    id: 'buggy', name: 'BUGGY', price: 500, emoji: '🏎️',
+    color: '#FF6600', bodyH: 24, bodyW: 72,
+    maxGears: 5, torque: 1.4, topSpeed: 350, mass: 0.9,
+    fuelCap: 80, fuelRate: 0.055,
+    description: 'Hızlı ve hafif',
+  },
+  {
+    id: 'monster', name: 'MONSTER', price: 1200, emoji: '🚛',
+    color: '#FF0044', bodyH: 40, bodyW: 90,
+    maxGears: 6, torque: 1.9, topSpeed: 300, mass: 1.8,
+    fuelCap: 150, fuelRate: 0.07,
+    description: 'Dev lastikler, dev güç',
+  },
+  {
+    id: 'formula', name: 'FORMULA', price: 2500, emoji: '🏁',
+    color: '#00AAFF', bodyH: 20, bodyW: 95,
+    maxGears: 7, torque: 1.6, topSpeed: 500, mass: 0.7,
+    fuelCap: 60, fuelRate: 0.09,
+    description: 'Pist canavarı',
+  },
+  {
+    id: 'tank', name: 'TANK', price: 3500, emoji: '🪖',
+    color: '#556B2F', bodyH: 44, bodyW: 100,
+    maxGears: 4, torque: 2.5, topSpeed: 220, mass: 2.5,
+    fuelCap: 200, fuelRate: 0.05,
+    description: 'Hiçbir tepe durduramaz',
+  },
+  {
+    id: 'rocket', name: 'ROCKET', price: 6000, emoji: '🚀',
+    color: '#FF00FF', bodyH: 22, bodyW: 88,
+    maxGears: 8, torque: 2.0, topSpeed: 600, mass: 0.8,
+    fuelCap: 70, fuelRate: 0.12,
+    description: 'Uzay teknolojisi',
+  },
+];
 
-// Harita Verileri
-const maps = {
-    hills: {
-        name: 'Yeşil Tepeler',
-        emoji: '🏔️',
-        price: 0,
-        bgColor: '#87CEEB',
-        groundColor: '#27ae60',
-        hillHeight: 100,
-        hillFrequency: 0.003,
-        coinFrequency: 0.02,
-        fuelFrequency: 0.05,
-        obstacleFrequency: 0.01
-    },
-    desert: {
-        name: 'Çöl',
-        emoji: '🏜️',
-        price: 300,
-        bgColor: '#F4A460',
-        groundColor: '#D2691E',
-        hillHeight: 80,
-        hillFrequency: 0.002,
-        coinFrequency: 0.015,
-        fuelFrequency: 0.04,
-        obstacleFrequency: 0.015
-    },
-    moon: {
-        name: 'Ay',
-        emoji: '🌑',
-        price: 800,
-        bgColor: '#1a1a2e',
-        groundColor: '#7f8c8d',
-        hillHeight: 60,
-        hillFrequency: 0.004,
-        coinFrequency: 0.025,
-        fuelFrequency: 0.03,
-        obstacleFrequency: 0.008,
-        gravity: 0.2
-    },
-    snow: {
-        name: 'Karlı Dağ',
-        emoji: '🏔️',
-        price: 1500,
-        bgColor: '#B0E0E6',
-        groundColor: '#ECF0F1',
-        hillHeight: 120,
-        hillFrequency: 0.0025,
-        coinFrequency: 0.02,
-        fuelFrequency: 0.035,
-        obstacleFrequency: 0.012,
-        slippery: true
-    },
-    volcano: {
-        name: 'Volkan',
-        emoji: '🌋',
-        price: 3000,
-        bgColor: '#2c0b0e',
-        groundColor: '#8B0000',
-        hillHeight: 90,
-        hillFrequency: 0.0035,
-        coinFrequency: 0.03,
-        fuelFrequency: 0.025,
-        obstacleFrequency: 0.02
-    }
-};
+// ===== MAP DEFINITIONS =====
+const MAPS = [
+  {
+    id: 'hills', name: 'YEŞİL TEPELER', price: 0,
+    bg: ['#1a3a1a','#0d2a0d'], groundColor: '#2d5a1b', skyTop: '#1a3a4a', skyBot: '#0d1a0d',
+    sunColor: '#FFEE88', clouds: true, trees: true,
+    difficulty: 1, emoji: '🌿',
+    terrainSeed: 1,
+  },
+  {
+    id: 'desert', name: 'ÇÖLLER', price: 800,
+    bg: ['#3a2200','#1a1000'], groundColor: '#c8a048', skyTop: '#ff8800', skyBot: '#ff4400',
+    sunColor: '#FFFF00', clouds: false, trees: false,
+    difficulty: 2, emoji: '🏜️',
+    terrainSeed: 2,
+  },
+  {
+    id: 'snow', name: 'KARLI DAĞLAR', price: 1500,
+    bg: ['#1a2a3a','#0a0a1a'], groundColor: '#ddeeff', skyTop: '#7aaabb', skyBot: '#2255aa',
+    sunColor: '#FFFFFF', clouds: true, trees: false,
+    difficulty: 3, emoji: '❄️',
+    terrainSeed: 3,
+  },
+  {
+    id: 'volcano', name: 'VOLKAN', price: 3000,
+    bg: ['#1a0500','#0a0000'], groundColor: '#2a1a0a', skyTop: '#330000', skyBot: '#110000',
+    sunColor: '#FF4400', clouds: false, trees: false,
+    difficulty: 4, emoji: '🌋',
+    terrainSeed: 4,
+  },
+  {
+    id: 'moon', name: 'AY', price: 5000,
+    bg: ['#000010','#000020'], groundColor: '#aaaacc', skyTop: '#000010', skyBot: '#000030',
+    sunColor: '#AAAAFF', clouds: false, trees: false,
+    difficulty: 5, emoji: '🌙',
+    terrainSeed: 5,
+  },
+];
 
-// Aktif Oyun Verileri
-let player = {
-    x: 100,
-    y: 0,
-    vx: 0,
-    vy: 0,
-    angle: 0,
-    angularVelocity: 0,
-    fuel: 100,
-    gear: 1,
-    maxGear: 5,
-    clutchPressed: false,
-    distance: 0,
-    coinsCollected: 0,
-    onGround: false
-};
+// ===== GAME STATE =====
+let canvas, ctx;
+let gameState = 'menu';
+let paused = false;
+let animId;
 
+let carDef, mapDef;
 let terrain = [];
 let coins = [];
-let fuels = [];
-let obstacles = [];
 let particles = [];
-let camera = { x: 0, y: 0 };
-let milestones = [100, 250, 500, 1000, 2000, 5000];
-let reachedMilestones = [];
+let milestones = [100, 250, 500, 1000, 2000, 3500, 5000];
+let passedMilestones = new Set();
 
-// Giriş Durumu
-const input = {
-    gas: false,
-    brake: false,
-    clutch: false
+// Car physics
+let car = {
+  x: 200, y: 300,
+  vx: 0, vy: 0,
+  angle: 0, angularVel: 0,
+  gear: 1, maxGear: 4,
+  rpm: 0, rpmTarget: 0,
+  throttle: 0, braking: false,
+  clutch: false,
+  fuel: 100, maxFuel: 100,
+  wheelAngle: 0,
+  dead: false,
+  onGround: false,
+  sessionGold: 0, sessionDist: 0,
+  wheelFrontY: 0, wheelBackY: 0,
+  wheelFrontX: 0, wheelBackX: 0,
 };
 
-// ===================== BAŞLATMA =====================
+// Terrain generation
+const TILE_W = 160;
+const TERRAIN_AHEAD = 30;
+let generatedTiles = 0;
+let cameraX = 0;
 
-function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+// Keys
+let keys = { gas: false, brake: false, clutch: false };
+
+// Gear ratios
+const GEAR_RATIOS = [0, 3.5, 2.2, 1.5, 1.1, 0.85, 0.7, 0.6, 0.5];
+
+// Milestone popup timer
+let milestoneTimer = 0;
+
+// ===== TERRAIN GENERATION =====
+function seededRandom(seed) {
+  let x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
 }
 
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
+function generateTerrain(map) {
+  terrain = [];
+  let y = 400;
+  let seed = map.terrainSeed * 1000;
+  for (let i = 0; i < TERRAIN_AHEAD; i++) {
+    seed++;
+    let dy = (seededRandom(seed) - 0.45) * 120 * map.difficulty;
+    dy = Math.max(-90, Math.min(90, dy));
+    y = Math.max(200, Math.min(520, y + dy));
+    terrain.push({ x: i * TILE_W, y });
+  }
+  generatedTiles = TERRAIN_AHEAD;
+}
 
-// ===================== ARAZİ OLUŞTURMA =====================
+function extendTerrain() {
+  const lastTile = terrain[terrain.length - 1];
+  let y = lastTile.y;
+  for (let i = 0; i < 8; i++) {
+    generatedTiles++;
+    let seed = mapDef.terrainSeed * 1000 + generatedTiles;
+    let dy = (seededRandom(seed) - 0.45) * 120 * mapDef.difficulty;
+    dy = Math.max(-80, Math.min(80, dy));
+    y = Math.max(200, Math.min(520, y + dy));
+    terrain.push({ x: generatedTiles * TILE_W, y });
+  }
+}
 
-function generateTerrain(startX, length) {
-    const map = maps[gameState.currentMap];
-    const points = [];
+// Interpolate terrain y at given x
+function getTerrainY(x) {
+  const tileIdx = x / TILE_W;
+  const i = Math.floor(tileIdx);
+  const t = tileIdx - i;
+  if (i < 0) return terrain[0] ? terrain[0].y : 400;
+  if (i >= terrain.length - 1) return terrain[terrain.length - 1] ? terrain[terrain.length - 1].y : 400;
+  const y0 = terrain[i].y;
+  const y1 = terrain[i + 1].y;
+  // Smooth cubic interpolation
+  const tc = t * t * (3 - 2 * t);
+  return y0 + (y1 - y0) * tc;
+}
 
-    for (let i = 0; i < length; i++) {
-        const x = startX + i * 10;
-        let y = canvas.height / 2 + Math.sin(x * map.hillFrequency) * map.hillHeight;
+function getTerrainAngle(x) {
+  const dx = 4;
+  const y0 = getTerrainY(x - dx);
+  const y1 = getTerrainY(x + dx);
+  return Math.atan2(y1 - y0, dx * 2);
+}
 
-        // Rastgele varyasyon ekle
-        y += Math.sin(x * map.hillFrequency * 2.5) * map.hillHeight * 0.3;
-        y += Math.sin(x * map.hillFrequency * 5) * map.hillHeight * 0.1;
-
-        // Zorluk seviyesine göre daha sert tepeler
-        if (gameState.settings.difficulty === 'hard') {
-            y += Math.sin(x * map.hillFrequency * 3) * map.hillHeight * 0.5;
-        }
-
-        points.push({ x, y });
+// ===== COIN GENERATION =====
+function generateCoinsForSection(startX, endX) {
+  for (let x = startX; x < endX; x += 120 + Math.random() * 100) {
+    const ty = getTerrainY(x);
+    if (Math.random() < 0.55) {
+      coins.push({ x, y: ty - 40, collected: false, bobOffset: Math.random() * Math.PI * 2 });
     }
-
-    return points;
+  }
 }
 
-function getGroundY(x) {
-    const map = maps[gameState.currentMap];
-    let y = canvas.height / 2 + Math.sin(x * map.hillFrequency) * map.hillHeight;
-    y += Math.sin(x * map.hillFrequency * 2.5) * map.hillHeight * 0.3;
-    y += Math.sin(x * map.hillFrequency * 5) * map.hillHeight * 0.1;
-
-    if (gameState.settings.difficulty === 'hard') {
-        y += Math.sin(x * map.hillFrequency * 3) * map.hillHeight * 0.5;
-    }
-
-    return y;
+// ===== PARTICLES =====
+function spawnCoinParticle(x, y) {
+  for (let i = 0; i < 6; i++) {
+    particles.push({
+      x, y, vx: (Math.random() - 0.5) * 6,
+      vy: -Math.random() * 6 - 2,
+      life: 1, maxLife: 1,
+      color: '#FFD700', size: 4 + Math.random() * 4,
+    });
+  }
+}
+function spawnExhaustParticle(x, y) {
+  if (Math.random() > 0.4) return;
+  particles.push({
+    x, y, vx: -1.5 - Math.random(),
+    vy: (Math.random() - 0.5) * 1.5,
+    life: 0.8, maxLife: 0.8,
+    color: '#888888', size: 6 + Math.random() * 6,
+  });
+}
+function spawnDustParticle(x, y) {
+  if (Math.random() > 0.3) return;
+  particles.push({
+    x, y, vx: (Math.random() - 0.7) * 3,
+    vy: -(Math.random() * 2 + 0.5),
+    life: 0.5, maxLife: 0.5,
+    color: '#AAAAAA', size: 3 + Math.random() * 5,
+  });
 }
 
-function getGroundAngle(x) {
-    const delta = 5;
-    const y1 = getGroundY(x - delta);
-    const y2 = getGroundY(x + delta);
-    return Math.atan2(y2 - y1, delta * 2);
-}
-
-// ===================== NESNE OLUŞTURMA =====================
-
-function spawnCoins(startX, endX) {
-    const map = maps[gameState.currentMap];
-    const newCoins = [];
-
-    for (let x = startX; x < endX; x += 50) {
-        if (Math.random() < map.coinFrequency) {
-            const y = getGroundY(x) - 80 - Math.random() * 100;
-            newCoins.push({
-                x,
-                y,
-                collected: false,
-                value: 10 + Math.floor(Math.random() * 20)
-            });
-        }
-    }
-
-    return newCoins;
-}
-
-function spawnFuels(startX, endX) {
-    const map = maps[gameState.currentMap];
-    const newFuels = [];
-
-    for (let x = startX; x < endX; x += 100) {
-        if (Math.random() < map.fuelFrequency) {
-            const y = getGroundY(x) - 60;
-            newFuels.push({
-                x,
-                y,
-                collected: false,
-                value: 25
-            });
-        }
-    }
-
-    return newFuels;
-}
-
-function spawnObstacles(startX, endX) {
-    const map = maps[gameState.currentMap];
-    const newObstacles = [];
-
-    for (let x = startX; x < endX; x += 80) {
-        if (Math.random() < map.obstacleFrequency) {
-            const y = getGroundY(x);
-            const type = Math.random() < 0.5 ? 'rock' : 'bump';
-            newObstacles.push({
-                x,
-                y,
-                type,
-                width: type === 'rock' ? 30 : 50,
-                height: type === 'rock' ? 25 : 15
-            });
-        }
-    }
-
-    return newObstacles;
-}
-
-// ===================== FİZİK =====================
+// ===== PHYSICS UPDATE =====
+const GRAVITY = 0.5;
+const WHEEL_RADIUS = 18;
+const CAR_HALF_W = 36;
 
 function updatePhysics(dt) {
-    const car = cars[gameState.currentCar];
-    const map = maps[gameState.currentMap];
+  if (car.dead || paused) return;
 
-    // Yerçekimi
-    const gravity = map.gravity || GRAVITY;
-    player.vy += gravity;
+  const carDef_ = carDef;
+  const maxGear = carDef_.maxGears;
 
-    // Hava direnci
-    player.vx *= AIR_RESISTANCE;
-    player.vy *= AIR_RESISTANCE;
+  // Fuel
+  if (keys.gas) {
+    car.fuel -= carDef_.fuelRate * (car.gear * 0.3 + 0.5) * dt * 60;
+    car.fuel = Math.max(0, car.fuel);
+  }
+  car.throttle = (keys.gas && car.fuel > 0) ? 1 : 0;
 
-    // Debriyaj kontrolü
-    let enginePower = 0;
-    if (input.gas && player.fuel > 0) {
-        // Vitese göre güç
-        const gearRatio = player.gear / car.maxSpeed;
-        enginePower = car.power * gearRatio;
+  // RPM
+  const gearRatio = GEAR_RATIOS[car.gear] || 1;
+  if (!car.clutch) {
+    const speedRpm = Math.abs(car.vx) * gearRatio * 40;
+    car.rpmTarget = car.throttle > 0 ? Math.min(7000, speedRpm + car.throttle * 3000) : Math.max(800, speedRpm);
+  } else {
+    car.rpmTarget = car.throttle > 0 ? 3500 + Math.random() * 500 : 800;
+  }
+  car.rpm += (car.rpmTarget - car.rpm) * 0.12;
 
-        // Debriyaj basılıysa güç aktarılmaz
-        if (player.clutchPressed) {
-            enginePower = 0;
-        }
+  // Drive force
+  let driveForce = 0;
+  if (!car.clutch && car.throttle > 0) {
+    const rpmFactor = Math.max(0, Math.min(1, (car.rpm - 800) / 5000));
+    driveForce = carDef_.torque * rpmFactor * 0.35 / gearRatio;
+  }
 
-        // Yakıt tüketimi
-        player.fuel -= car.fuelConsumption * (1 + player.gear * 0.1);
+  // Brake force
+  if (keys.brake) {
+    car.vx *= 0.92;
+    car.angularVel *= 0.85;
+  }
+
+  // Gravity
+  car.vy += GRAVITY * dt * 60;
+
+  // Wheel positions
+  const cos = Math.cos(car.angle);
+  const sin = Math.sin(car.angle);
+  const wfx = car.x + cos * CAR_HALF_W;
+  const wfy = car.y + sin * CAR_HALF_W;
+  const wbx = car.x - cos * CAR_HALF_W;
+  const wby = car.y - sin * CAR_HALF_W;
+
+  const groundFront = getTerrainY(wfx + cameraX);
+  const groundBack = getTerrainY(wbx + cameraX);
+
+  const frontOnGround = wfy + WHEEL_RADIUS >= groundFront;
+  const backOnGround = wby + WHEEL_RADIUS >= groundBack;
+  car.onGround = frontOnGround || backOnGround;
+
+  // Front wheel
+  if (frontOnGround) {
+    const overlap = (wfy + WHEEL_RADIUS) - groundFront;
+    car.y -= sin * overlap * 0.5;
+    car.vy -= overlap * 0.6 * dt * 60;
+    if (car.vy > 0) car.vy *= 0.4;
+    spawnDustParticle(wfx - cameraX + car.x - car.x, wfy);
+  }
+  // Back wheel
+  if (backOnGround) {
+    const overlap = (wby + WHEEL_RADIUS) - groundBack;
+    car.y -= sin * overlap * 0.5;
+    car.vy -= overlap * 0.6 * dt * 60;
+    if (car.vy > 0) car.vy *= 0.4;
+
+    // Drive on back wheel
+    if (driveForce > 0) {
+      const terrAngle = getTerrainAngle(wbx + cameraX);
+      car.vx += Math.cos(terrAngle) * driveForce * dt * 60;
+      car.vy += Math.sin(terrAngle) * driveForce * dt * 60 * 0.3;
     }
+  }
 
-    // Fren
-    if (input.brake) {
-        player.vx *= 0.95;
-        player.angularVelocity *= 0.9;
+  // Air resistance & max speed
+  const maxSpeedMs = carDef_.topSpeed / 12;
+  if (Math.abs(car.vx) > maxSpeedMs) car.vx *= 0.98;
+  car.vx *= car.onGround ? 0.97 : 0.995;
+
+  // Angular stabilization
+  if (car.onGround) {
+    const targetAngle = getTerrainAngle(car.x + cameraX);
+    const angleDiff = targetAngle - car.angle;
+    car.angle += angleDiff * 0.15;
+    car.angularVel *= 0.6;
+  } else {
+    // In air, slight stabilization
+    car.angle += car.angularVel * dt * 60;
+    car.angularVel += (0 - car.angle) * 0.005;
+    car.angularVel *= 0.97;
+  }
+
+  // Move car
+  car.x += car.vx * dt * 60;
+  car.y += car.vy * dt * 60;
+
+  // Camera follows
+  const targetCamX = car.x - canvas.width * 0.35;
+  if (targetCamX > cameraX) {
+    cameraX = targetCamX;
+    // Extend terrain if needed
+    const lastTileX = terrain[terrain.length - 1].x;
+    if (cameraX + canvas.width > lastTileX - TILE_W * 4) extendTerrain();
+    // Generate coins
+    generateCoinsForSection(lastTileX + cameraX - 200, lastTileX + cameraX + canvas.width);
+  }
+
+  // Wheel spin animation
+  car.wheelAngle += car.vx * 0.15;
+
+  // Exhaust
+  const exhaustX = car.x - cos * 42 - cameraX;
+  const exhaustY = car.y - sin * 42 + 10;
+  spawnExhaustParticle(exhaustX, exhaustY);
+
+  // Distance & gold
+  const dist = Math.max(0, cameraX / 80);
+  car.sessionDist = Math.round(dist);
+
+  // Milestone check
+  checkMilestones(car.sessionDist);
+
+  // Death check (flip over or fall)
+  if (Math.abs(car.angle) > Math.PI * 0.6 || car.y > canvas.height + 200) {
+    killCar();
+  }
+
+  // Coin collection
+  const carWorldX = car.x + cameraX;
+  for (const coin of coins) {
+    if (coin.collected) continue;
+    const dx = coin.x - carWorldX;
+    const dy = coin.y - car.y;
+    if (Math.abs(dx) < 35 && Math.abs(dy) < 35) {
+      coin.collected = true;
+      const earned = 1;
+      car.sessionGold += earned;
+      player.gold += earned;
+      spawnCoinParticle(coin.x - cameraX, coin.y);
+      updateHUDGold();
     }
+  }
 
-    // Motor gücü uygula
-    if (!player.clutchPressed) {
-        const force = enginePower * Math.cos(player.angle);
-        player.vx += force / car.mass;
-    }
+  // Update particles
+  for (const p of particles) {
+    p.x += p.vx; p.y += p.vy;
+    p.vy += 0.15; p.vx *= 0.95;
+    p.life -= 0.03;
+  }
+  particles = particles.filter(p => p.life > 0);
 
-    // Maksimum hız limiti
-    const maxSpeed = car.maxSpeed * (player.gear / 5);
-    if (player.vx > maxSpeed) player.vx = maxSpeed;
-    if (player.vx < -maxSpeed * 0.5) player.vx = -maxSpeed * 0.5;
-
-    // Kaygan zemin (kar)
-    if (map.slippery && player.onGround) {
-        player.vx *= 0.995;
-    }
-
-    // Pozisyon güncelle
-    player.x += player.vx;
-    player.y += player.vy;
-
-    // Zemin kontrolü
-    const groundY = getGroundY(player.x);
-    const groundAngle = getGroundAngle(player.x);
-
-    // Tekerlek pozisyonları
-    const carWidth = car.width;
-    const frontWheelX = player.x + carWidth / 2 * Math.cos(player.angle);
-    const backWheelX = player.x - carWidth / 2 * Math.cos(player.angle);
-    const frontWheelY = getGroundY(frontWheelX);
-    const backWheelY = getGroundY(backWheelX);
-
-    // Araba açısı
-    const targetAngle = Math.atan2(frontWheelY - backWheelY, frontWheelX - backWheelX);
-    player.angle += (targetAngle - player.angle) * 0.1;
-
-    // Zemin çarpışması
-    const carBottom = player.y + car.height / 2;
-    const avgGroundY = (frontWheelY + backWheelY) / 2 - car.wheelRadius;
-
-    if (carBottom > avgGroundY) {
-        player.y = avgGroundY - car.height / 2;
-        player.vy = 0;
-        player.onGround = true;
-
-        // Sürtünme
-        player.vx *= car.grip;
-
-        // Zıplama engelleme (çok dik yerlerde)
-        if (Math.abs(groundAngle) > Math.PI / 3) {
-            player.vx *= 0.5;
-        }
-    } else {
-        player.onGround = false;
-    }
-
-    // Açısal hız
-    player.angle += player.angularVelocity;
-    player.angularVelocity *= 0.95;
-
-    // Denge düzeltme
-    if (player.onGround) {
-        player.angularVelocity += (targetAngle - player.angle) * 0.05;
-    }
-
-    // Mesafe güncelle
-    if (player.x > player.distance) {
-        player.distance = Math.floor(player.x);
-    }
-
-    // Yakıt kontrolü
-    if (player.fuel <= 0) {
-        player.fuel = 0;
-        // Yakıt bittiğinde yavaşça dur
-        if (player.onGround) {
-            player.vx *= 0.99;
-        }
-    }
-
-    // Düşme kontrolü
-    if (player.y > canvas.height + 200) {
-        gameOver();
-    }
-
-    // Baş aşağı kontrolü
-    if (Math.abs(player.angle) > Math.PI) {
-        // Araba ters döndü
-        player.angularVelocity += Math.sign(player.angle) * -0.01;
-    }
+  // Update HUD
+  document.getElementById('distanceDisplay').textContent = car.sessionDist + ' m';
+  const speedKmh = Math.round(Math.abs(car.vx) * 30);
+  document.getElementById('speedDisplay').textContent = speedKmh + ' km/h';
+  document.getElementById('gearDisplay').textContent = car.clutch ? 'N' : car.gear;
+  document.getElementById('rpmFill').style.width = Math.min(100, car.rpm / 70) + '%';
+  document.getElementById('fuelFill').style.width = (car.fuel / car.maxFuel * 100) + '%';
 }
 
-// ===================== ÇARPIŞMA KONTROLÜ =====================
-
-function checkCollisions() {
-    const car = cars[gameState.currentCar];
-
-    // Altın toplama
-    coins.forEach(coin => {
-        if (!coin.collected) {
-            const dx = player.x - coin.x;
-            const dy = player.y - coin.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if (dist < 40) {
-                coin.collected = true;
-                player.coinsCollected += coin.value;
-                gameState.coins += coin.value;
-                createParticles(coin.x, coin.y, '#f39c12', 10);
-                updateHUD();
-                saveGame();
-            }
-        }
-    });
-
-    // Yakıt toplama
-    fuels.forEach(fuel => {
-        if (!fuel.collected) {
-            const dx = player.x - fuel.x;
-            const dy = player.y - fuel.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if (dist < 40) {
-                fuel.collected = true;
-                player.fuel = Math.min(100, player.fuel + fuel.value);
-                createParticles(fuel.x, fuel.y, '#e74c3c', 8);
-                updateHUD();
-            }
-        }
-    });
-
-    // Engel çarpışması
-    obstacles.forEach(obs => {
-        const dx = player.x - obs.x;
-        const dy = player.y - obs.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist < 40) {
-            // Çarpma etkisi
-            player.vx *= -0.5;
-            player.vy -= 5;
-            player.angularVelocity += (Math.random() - 0.5) * 0.2;
-            createParticles(obs.x, obs.y, '#7f8c8d', 15);
-        }
-    });
-
-    // Mesafe kilometre taşları
-    milestones.forEach(milestone => {
-        if (player.distance >= milestone && !reachedMilestones.includes(milestone)) {
-            reachedMilestones.push(milestone);
-            const reward = milestone * 0.5;
-            gameState.coins += reward;
-            player.coinsCollected += reward;
-            showMilestonePopup(milestone, reward);
-            saveGame();
-            updateHUD();
-        }
-    });
-}
-
-// ===================== PARÇACIK SİSTEMİ =====================
-
-function createParticles(x, y, color, count) {
-    for (let i = 0; i < count; i++) {
-        particles.push({
-            x,
-            y,
-            vx: (Math.random() - 0.5) * 8,
-            vy: (Math.random() - 0.5) * 8 - 3,
-            life: 1,
-            color,
-            size: Math.random() * 5 + 2
-        });
+function checkMilestones(dist) {
+  for (const m of milestones) {
+    if (dist >= m && !passedMilestones.has(m)) {
+      passedMilestones.add(m);
+      const reward = Math.round(m * 0.3);
+      player.gold += reward;
+      car.sessionGold += reward;
+      save();
+      updateHUDGold();
+      showMilestonePopup(m, reward);
     }
+  }
 }
 
-function updateParticles() {
-    for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vy += 0.2;
-        p.life -= 0.02;
-
-        if (p.life <= 0) {
-            particles.splice(i, 1);
-        }
-    }
+function showMilestonePopup(meters, gold) {
+  const popup = document.getElementById('milestonePopup');
+  document.getElementById('milestoneText').textContent = meters + ' METRE!';
+  document.getElementById('milestoneReward').textContent = '+' + gold + ' 🪙';
+  popup.classList.remove('hidden');
+  milestoneTimer = 180;
 }
 
-// ===================== ÇİZİM =====================
+function updateHUDGold() {
+  document.getElementById('hudGold').textContent = player.gold;
+  document.getElementById('menuGoldCount').textContent = player.gold;
+  document.getElementById('garageGold').textContent = player.gold;
+  document.getElementById('mapGold').textContent = player.gold;
+}
 
+function killCar() {
+  car.dead = true;
+  save();
+  setTimeout(() => {
+    document.getElementById('finalDistance').textContent = car.sessionDist + ' m';
+    document.getElementById('finalGold').textContent = car.sessionGold;
+    document.getElementById('gameOver').classList.remove('hidden');
+  }, 600);
+}
+
+// ===== DRAWING =====
 function draw() {
-    const map = maps[gameState.currentMap];
-    const car = cars[gameState.currentCar];
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
 
-    // Arkaplan
-    ctx.fillStyle = map.bgColor;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Sky gradient
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, H * 0.75);
+  skyGrad.addColorStop(0, mapDef.skyTop);
+  skyGrad.addColorStop(1, mapDef.skyBot);
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(0, 0, W, H);
 
-    // Kamera pozisyonu
-    camera.x = player.x - canvas.width / 3;
-    camera.y = player.y - canvas.height / 2;
+  // Sun/Moon
+  ctx.save();
+  ctx.shadowBlur = 30; ctx.shadowColor = mapDef.sunColor;
+  ctx.fillStyle = mapDef.sunColor;
+  ctx.beginPath(); ctx.arc(W * 0.8, 80, 28, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
 
-    // Yıldızlar (Ay haritası)
-    if (gameState.currentMap === 'moon') {
-        ctx.fillStyle = 'white';
-        for (let i = 0; i < 100; i++) {
-            const sx = (i * 137.5 + camera.x * 0.1) % canvas.width;
-            const sy = (i * 89.7) % canvas.height;
-            ctx.beginPath();
-            ctx.arc(sx, sy, Math.random() * 2, 0, Math.PI * 2);
-            ctx.fill();
-        }
+  // Clouds
+  if (mapDef.clouds) drawClouds(W, H);
+
+  // Trees
+  if (mapDef.trees) drawTrees(W, H);
+
+  // Terrain
+  drawTerrain(W, H);
+
+  // Coins
+  drawCoins(W, H);
+
+  // Particles
+  drawParticles();
+
+  // Car
+  if (!car.dead) drawCar(W, H);
+
+  // Milestone popup timer
+  if (milestoneTimer > 0) {
+    milestoneTimer--;
+    if (milestoneTimer <= 0) {
+      document.getElementById('milestonePopup').classList.add('hidden');
     }
+  }
+}
+
+function drawClouds(W, H) {
+  const cloudX = (cameraX * 0.2) % (W * 2);
+  ctx.save(); ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.globalAlpha = 0.5;
+  const clouds = [[100, 80, 60, 25], [280, 55, 80, 20], [500, 90, 55, 22],
+                   [W + 80, 70, 70, 20], [W + 350, 50, 65, 24]];
+  for (const [cx, cy, rw, rh] of clouds) {
+    const bx = ((cx - cloudX % W + W) % (W * 1.5));
+    ctx.beginPath(); ctx.ellipse(bx, cy, rw, rh, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bx + 30, cy - 8, rw * 0.6, rh * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawTrees(W, H) {
+  ctx.save();
+  const treePositions = [];
+  for (let i = 0; i < 12; i++) {
+    const worldX = Math.floor((cameraX + i * 180) / 180) * 180 + (i * 37 % 120);
+    treePositions.push(worldX - cameraX);
+  }
+  for (const tx of treePositions) {
+    if (tx < -50 || tx > W + 50) continue;
+    const worldX = tx + cameraX;
+    const ty = getTerrainY(worldX);
+    const h = 50 + (worldX % 30);
+    ctx.fillStyle = '#1a3a0a';
+    ctx.fillRect(tx - 5, ty - h - 8, 10, h);
+    ctx.fillStyle = '#2a5a15';
+    ctx.beginPath(); ctx.moveTo(tx, ty - h - 30); ctx.lineTo(tx - 22, ty - h + 5); ctx.lineTo(tx + 22, ty - h + 5); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(tx, ty - h - 50); ctx.lineTo(tx - 16, ty - h - 18); ctx.lineTo(tx + 16, ty - h - 18); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawTerrain(W, H) {
+  // Ground fill
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  for (let sx = 0; sx <= W; sx += 4) {
+    const worldX = sx + cameraX;
+    const ty = getTerrainY(worldX);
+    ctx.lineTo(sx, ty);
+  }
+  ctx.lineTo(W, H);
+  ctx.closePath();
+
+  const groundGrad = ctx.createLinearGradient(0, 200, 0, H);
+  groundGrad.addColorStop(0, mapDef.groundColor);
+  groundGrad.addColorStop(0.2, adjustColor(mapDef.groundColor, -30));
+  groundGrad.addColorStop(1, adjustColor(mapDef.groundColor, -60));
+  ctx.fillStyle = groundGrad;
+  ctx.fill();
+
+  // Ground surface line
+  ctx.beginPath();
+  ctx.moveTo(0, getTerrainY(cameraX));
+  for (let sx = 0; sx <= W; sx += 4) {
+    ctx.lineTo(sx, getTerrainY(sx + cameraX));
+  }
+  ctx.strokeStyle = adjustColor(mapDef.groundColor, 40);
+  ctx.lineWidth = 3; ctx.stroke();
+
+  // Rocks
+  for (let i = 0; i < 8; i++) {
+    const worldX = Math.floor((cameraX + i * 200) / 200) * 200 + (i * 53 % 150);
+    const sx = worldX - cameraX;
+    if (sx < -30 || sx > W + 30) continue;
+    const ty = getTerrainY(worldX);
+    ctx.fillStyle = '#666677';
+    ctx.beginPath(); ctx.ellipse(sx, ty - 5, 15, 8, 0, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function drawCoins(W, H) {
+  const t = Date.now() / 1000;
+  for (const coin of coins) {
+    if (coin.collected) continue;
+    const sx = coin.x - cameraX;
+    if (sx < -20 || sx > W + 20) continue;
+    const sy = coin.y + Math.sin(t * 3 + coin.bobOffset) * 5;
 
     ctx.save();
-    ctx.translate(-camera.x, -camera.y);
+    ctx.translate(sx, sy);
 
-    // Zemin çizimi
+    // Glow
+    ctx.shadowBlur = 15; ctx.shadowColor = '#FFD700';
+
+    // Coin body
+    const coinGrad = ctx.createRadialGradient(-4, -4, 1, 0, 0, 11);
+    coinGrad.addColorStop(0, '#FFFAAA');
+    coinGrad.addColorStop(0.5, '#FFD700');
+    coinGrad.addColorStop(1, '#B8860B');
+    ctx.fillStyle = coinGrad;
+    ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = '#B8860B';
+    ctx.font = 'bold 10px serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowBlur = 0;
+    ctx.fillText('₺', 0, 0);
+    ctx.restore();
+  }
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.save();
+    ctx.globalAlpha = p.life / p.maxLife;
+    ctx.fillStyle = p.color;
     ctx.beginPath();
-    ctx.moveTo(camera.x, canvas.height);
-
-    for (let x = camera.x; x < camera.x + canvas.width + 100; x += 10) {
-        ctx.lineTo(x, getGroundY(x));
-    }
-
-    ctx.lineTo(camera.x + canvas.width + 100, canvas.height);
-    ctx.closePath();
-    ctx.fillStyle = map.groundColor;
+    ctx.arc(p.x, p.y, p.size * (p.life / p.maxLife), 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
+  }
+}
 
-    // Zemin detayları
-    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-    ctx.lineWidth = 2;
+function drawCar(W, H) {
+  const sx = car.x;
+  const sy = car.y;
+
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.rotate(car.angle);
+
+  const cdef = carDef;
+  const bw = cdef.bodyW, bh = cdef.bodyH;
+
+  // Shadow
+  ctx.save();
+  ctx.rotate(-car.angle);
+  ctx.translate(0, 20);
+  const shadowGrad = ctx.createRadialGradient(0, 0, 5, 0, 0, 50);
+  shadowGrad.addColorStop(0, 'rgba(0,0,0,0.3)');
+  shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = shadowGrad;
+  ctx.fillRect(-50, -10, 100, 20);
+  ctx.restore();
+
+  // Suspension springs
+  drawWheel(-CAR_HALF_W, bh / 2 + 8, true);
+  drawWheel(CAR_HALF_W, bh / 2 + 8, false);
+
+  // Car body
+  drawCarBody(cdef);
+
+  ctx.restore();
+}
+
+function drawWheel(ox, oy, isBack) {
+  const r = WHEEL_RADIUS;
+  ctx.save();
+  ctx.translate(ox, oy);
+
+  // Spring
+  ctx.strokeStyle = 'rgba(150,150,150,0.6)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const yy = -16 + i * 4;
+    ctx.lineTo(i % 2 === 0 ? 3 : -3, yy);
+  }
+  ctx.stroke();
+
+  // Tire
+  ctx.rotate(car.wheelAngle);
+  const tireGrad = ctx.createRadialGradient(0, 0, r * 0.3, 0, 0, r);
+  tireGrad.addColorStop(0, '#444');
+  tireGrad.addColorStop(1, '#111');
+  ctx.fillStyle = tireGrad;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Tread marks
+  ctx.strokeStyle = '#555'; ctx.lineWidth = 1.5;
+  for (let i = 0; i < 8; i++) {
+    const a = i * Math.PI / 4;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * r * 0.6, Math.sin(a) * r * 0.6);
+    ctx.lineTo(Math.cos(a) * r * 0.95, Math.sin(a) * r * 0.95);
     ctx.stroke();
+  }
 
-    // Altınlar
-    coins.forEach(coin => {
-        if (!coin.collected && coin.x > camera.x - 50 && coin.x < camera.x + canvas.width + 50) {
-            ctx.save();
-            ctx.translate(coin.x, coin.y);
+  // Hub
+  ctx.fillStyle = '#888';
+  ctx.beginPath(); ctx.arc(0, 0, r * 0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#aaa';
+  ctx.beginPath(); ctx.arc(0, 0, r * 0.12, 0, Math.PI * 2); ctx.fill();
 
-            // Parıltı efekti
-            const glow = Math.sin(Date.now() / 200) * 5;
-            ctx.shadowColor = '#f39c12';
-            ctx.shadowBlur = 10 + glow;
-
-            ctx.fillStyle = '#f39c12';
-            ctx.beginPath();
-            ctx.arc(0, 0, 15, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = '#f1c40f';
-            ctx.beginPath();
-            ctx.arc(0, 0, 10, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = '#f39c12';
-            ctx.font = 'bold 16px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('$', 0, 1);
-
-            ctx.restore();
-        }
-    });
-
-    // Yakıt bidonları
-    fuels.forEach(fuel => {
-        if (!fuel.collected && fuel.x > camera.x - 50 && fuel.x < camera.x + canvas.width + 50) {
-            ctx.save();
-            ctx.translate(fuel.x, fuel.y);
-
-            ctx.shadowColor = '#e74c3c';
-            ctx.shadowBlur = 10;
-
-            // Bidon gövdesi
-            ctx.fillStyle = '#e74c3c';
-            ctx.fillRect(-12, -15, 24, 30);
-
-            // Kapak
-            ctx.fillStyle = '#c0392b';
-            ctx.fillRect(-8, -20, 16, 5);
-
-            // Yakıt işareti
-            ctx.fillStyle = 'white';
-            ctx.font = 'bold 14px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('⛽', 0, 2);
-
-            ctx.restore();
-        }
-    });
-
-    // Engeller
-    obstacles.forEach(obs => {
-        if (obs.x > camera.x - 50 && obs.x < camera.x + canvas.width + 50) {
-            ctx.save();
-            ctx.translate(obs.x, obs.y);
-
-            if (obs.type === 'rock') {
-                ctx.fillStyle = '#7f8c8d';
-                ctx.beginPath();
-                ctx.moveTo(-15, 0);
-                ctx.lineTo(-10, -20);
-                ctx.lineTo(5, -25);
-                ctx.lineTo(15, -15);
-                ctx.lineTo(12, 0);
-                ctx.closePath();
-                ctx.fill();
-
-                ctx.fillStyle = '#95a5a6';
-                ctx.beginPath();
-                ctx.arc(-5, -10, 5, 0, Math.PI * 2);
-                ctx.fill();
-            } else {
-                // Tümsek
-                ctx.fillStyle = map.groundColor;
-                ctx.beginPath();
-                ctx.ellipse(0, -5, obs.width / 2, obs.height / 2, 0, Math.PI, 0);
-                ctx.fill();
-            }
-
-            ctx.restore();
-        }
-    });
-
-    // Araba çizimi
-    ctx.save();
-    ctx.translate(player.x, player.y);
-    ctx.rotate(player.angle);
-
-    // Araba gövdesi
-    const carW = car.width;
-    const carH = car.height;
-
-    ctx.fillStyle = car.color;
-    ctx.fillRect(-carW / 2, -carH / 2, carW, carH);
-
-    // Araba detayları
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
-    ctx.fillRect(-carW / 2 + 5, -carH / 2 + 5, carW - 10, carH - 10);
-
-    // Cam
-    ctx.fillStyle = '#87CEEB';
-    ctx.fillRect(-carW / 4, -carH / 2 - 5, carW / 2, 8);
-
-    // Farlar
-    ctx.fillStyle = '#f1c40f';
+  // Lug nuts
+  for (let i = 0; i < 5; i++) {
+    const a = i * Math.PI * 2 / 5;
+    ctx.fillStyle = '#bbb';
     ctx.beginPath();
-    ctx.arc(carW / 2 - 5, -carH / 4, 4, 0, Math.PI * 2);
+    ctx.arc(Math.cos(a) * r * 0.55, Math.sin(a) * r * 0.55, 2.5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.beginPath();
-    ctx.arc(carW / 2 - 5, carH / 4, 4, 0, Math.PI * 2);
-    ctx.fill();
+  }
 
-    // Stop lambaları
-    ctx.fillStyle = '#e74c3c';
-    ctx.beginPath();
-    ctx.arc(-carW / 2 + 5, -carH / 4, 3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(-carW / 2 + 5, carH / 4, 3, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Tekerlekler
-    if (car.wheelRadius > 0) {
-        const wheelY = carH / 2 + car.wheelRadius / 2;
-
-        // Ön tekerlek
-        ctx.save();
-        ctx.translate(carW / 2 - 5, wheelY);
-        ctx.fillStyle = '#2c3e50';
-        ctx.beginPath();
-        ctx.arc(0, 0, car.wheelRadius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#7f8c8d';
-        ctx.beginPath();
-        ctx.arc(0, 0, car.wheelRadius * 0.6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-
-        // Arka tekerlek
-        ctx.save();
-        ctx.translate(-carW / 2 + 5, wheelY);
-        ctx.fillStyle = '#2c3e50';
-        ctx.beginPath();
-        ctx.arc(0, 0, car.wheelRadius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#7f8c8d';
-        ctx.beginPath();
-        ctx.arc(0, 0, car.wheelRadius * 0.6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-    } else {
-        // Hover efekti
-        ctx.fillStyle = 'rgba(155, 89, 182, 0.3)';
-        ctx.beginPath();
-        ctx.ellipse(0, carH / 2 + 10, carW / 2, 5, 0, 0, Math.PI * 2);
-        ctx.fill();
-    }
-
-    // Emoji
-    ctx.fillStyle = 'white';
-    ctx.font = '20px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(car.emoji, 0, 0);
-
-    ctx.restore();
-
-    // Parçacıklar
-    particles.forEach(p => {
-        ctx.save();
-        ctx.globalAlpha = p.life;
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-    });
-
-    // Mesafe işaretleri
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.font = '14px Arial';
-    ctx.textAlign = 'center';
-
-    for (let m = 0; m <= player.distance + 500; m += 100) {
-        if (m > camera.x - 100 && m < camera.x + canvas.width + 100) {
-            const my = getGroundY(m);
-            ctx.fillRect(m - 1, my - 30, 2, 30);
-            ctx.fillText(m + 'm', m, my - 35);
-        }
-    }
-
-    ctx.restore();
+  ctx.restore();
 }
 
-// ===================== OYUN DÖNGÜSÜ =====================
+function drawCarBody(cdef) {
+  const bw = cdef.bodyW, bh = cdef.bodyH;
+  const color = cdef.color;
 
-function gameLoop(timestamp) {
-    if (!gameRunning) return;
+  // Chassis
+  ctx.save();
+  const bodyGrad = ctx.createLinearGradient(0, -bh, 0, bh / 2);
+  bodyGrad.addColorStop(0, lightenColor(color, 40));
+  bodyGrad.addColorStop(0.5, color);
+  bodyGrad.addColorStop(1, darkenColor(color, 40));
+  ctx.fillStyle = bodyGrad;
+  ctx.shadowBlur = 8; ctx.shadowColor = color + '88';
 
-    const dt = (timestamp - lastTime) / 16.67;
-    lastTime = timestamp;
+  // Main body shape
+  if (cdef.id === 'formula') {
+    // Low, aerodynamic
+    ctx.beginPath();
+    ctx.moveTo(-bw / 2, bh / 2);
+    ctx.lineTo(bw / 2 + 10, bh / 2);
+    ctx.lineTo(bw / 2 + 15, 0);
+    ctx.lineTo(bw / 3, -bh);
+    ctx.lineTo(-bw / 3, -bh);
+    ctx.lineTo(-bw / 2, 0);
+    ctx.closePath(); ctx.fill();
+    // Wings
+    ctx.fillStyle = darkenColor(color, 20);
+    ctx.fillRect(-bw / 2 - 20, -5, 20, 5);
+    ctx.fillRect(bw / 2 + 10, -5, 20, 5);
+  } else if (cdef.id === 'monster' || cdef.id === 'tank') {
+    ctx.beginPath();
+    ctx.roundRect(-bw / 2, -bh, bw, bh * 1.5, 6);
+    ctx.fill();
+    // Cab
+    ctx.fillStyle = lightenColor(color, 20);
+    ctx.beginPath(); ctx.roundRect(-bw / 4, -bh * 1.6, bw / 2, bh * 0.8, 4); ctx.fill();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(-bw / 2, bh / 2);
+    ctx.lineTo(bw / 2, bh / 2);
+    ctx.lineTo(bw / 2, -bh * 0.3);
+    ctx.lineTo(bw * 0.3, -bh);
+    ctx.lineTo(-bw * 0.25, -bh);
+    ctx.lineTo(-bw / 2, -bh * 0.3);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
 
-    // Nesne oluşturma (ilerledikçe)
-    const spawnEnd = player.x + canvas.width + 500;
-    if (coins.length === 0 || coins[coins.length - 1].x < spawnEnd) {
-        const startX = coins.length > 0 ? coins[coins.length - 1].x + 50 : player.x;
-        coins.push(...spawnCoins(startX, spawnEnd + 500));
-    }
+  // Windows
+  ctx.save();
+  ctx.fillStyle = 'rgba(150,220,255,0.5)';
+  if (cdef.id !== 'formula' && cdef.id !== 'tank') {
+    ctx.beginPath();
+    ctx.moveTo(-bw * 0.22, -bh * 0.9);
+    ctx.lineTo(bw * 0.25, -bh * 0.9);
+    ctx.lineTo(bw * 0.32, -bh * 0.35);
+    ctx.lineTo(-bw * 0.22, -bh * 0.35);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
 
-    if (fuels.length === 0 || fuels[fuels.length - 1].x < spawnEnd) {
-        const startX = fuels.length > 0 ? fuels[fuels.length - 1].x + 100 : player.x;
-        fuels.push(...spawnFuels(startX, spawnEnd + 500));
-    }
+  // Headlights
+  ctx.save();
+  ctx.fillStyle = '#FFFFAA';
+  ctx.shadowBlur = 10; ctx.shadowColor = '#FFFF00';
+  ctx.beginPath(); ctx.ellipse(bw / 2 - 4, -bh * 0.1, 5, 4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
 
-    if (obstacles.length === 0 || obstacles[obstacles.length - 1].x < spawnEnd) {
-        const startX = obstacles.length > 0 ? obstacles[obstacles.length - 1].x + 80 : player.x + 200;
-        obstacles.push(...spawnObstacles(startX, spawnEnd + 500));
-    }
+  // Exhaust pipe
+  ctx.save();
+  ctx.fillStyle = '#555';
+  ctx.fillRect(-bw / 2 - 8, bh * 0.2, 10, 5);
+  ctx.restore();
 
-    // Temizlik (geride kalanları sil)
-    coins = coins.filter(c => c.x > player.x - 500);
-    fuels = fuels.filter(f => f.x > player.x - 500);
-    obstacles = obstacles.filter(o => o.x > player.x - 500);
-
-    updatePhysics(dt);
-    checkCollisions();
-    updateParticles();
-    draw();
-    updateHUD();
-
-    animationId = requestAnimationFrame(gameLoop);
+  // Rollbar / detail line
+  ctx.save();
+  ctx.strokeStyle = darkenColor(color, 30);
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-bw * 0.1, -bh * 0.4);
+  ctx.lineTo(-bw * 0.1, -bh * 0.95);
+  ctx.lineTo(bw * 0.28, -bh * 0.95);
+  ctx.stroke();
+  ctx.restore();
 }
 
-// ===================== HUD GÜNCELLEME =====================
+function adjustColor(hex, amount) {
+  const r = Math.max(0, Math.min(255, parseInt(hex.slice(1, 3), 16) + amount));
+  const g = Math.max(0, Math.min(255, parseInt(hex.slice(3, 5), 16) + amount));
+  const b = Math.max(0, Math.min(255, parseInt(hex.slice(5, 7), 16) + amount));
+  return `rgb(${r},${g},${b})`;
+}
+function lightenColor(hex, amount) { return adjustColor(hex, amount); }
+function darkenColor(hex, amount) { return adjustColor(hex, -amount); }
 
-function updateHUD() {
-    document.getElementById('coin-count').textContent = player.coinsCollected;
-    document.getElementById('distance').textContent = player.distance;
-    document.getElementById('fuel').textContent = Math.floor(player.fuel);
-    document.getElementById('current-gear').textContent = player.gear;
-    document.getElementById('clutch-status').textContent = player.clutchPressed ? 'Basılı' : 'Bırakıldı';
-    document.getElementById('clutch-status').style.color = player.clutchPressed ? '#e74c3c' : '#27ae60';
-
-    // Yakıt rengi
-    const fuelDisplay = document.getElementById('fuel-display');
-    if (player.fuel < 20) {
-        fuelDisplay.style.color = '#e74c3c';
-    } else if (player.fuel < 50) {
-        fuelDisplay.style.color = '#f39c12';
-    } else {
-        fuelDisplay.style.color = '#27ae60';
-    }
+// ===== CONTROLS =====
+function startGas() { keys.gas = true; }
+function stopGas() { keys.gas = false; }
+function startBrake() { keys.brake = true; }
+function stopBrake() { keys.brake = false; }
+function clutchPress() {
+  keys.clutch = true; car.clutch = true;
+  document.getElementById('clutchBtn').classList.add('pressed');
+  document.getElementById('clutchIndicator').classList.add('active');
+}
+function clutchRelease() {
+  keys.clutch = false; car.clutch = false;
+  document.getElementById('clutchBtn').classList.remove('pressed');
+  document.getElementById('clutchIndicator').classList.remove('active');
+}
+function gearUp() {
+  if (car.gear < carDef.maxGears) car.gear++;
+  flashGear();
+}
+function gearDown() {
+  if (car.gear > 1) car.gear--;
+  flashGear();
+}
+function flashGear() {
+  const g = document.getElementById('gearDisplay');
+  g.style.color = '#FFFFFF';
+  setTimeout(() => { g.style.color = ''; }, 300);
 }
 
-// ===================== OYUN DURUMLARI =====================
+// Keyboard support
+document.addEventListener('keydown', e => {
+  if (gameState !== 'game') return;
+  if (e.key === 'ArrowRight' || e.key === 'd') startGas();
+  if (e.key === 'ArrowLeft' || e.key === 'a') startBrake();
+  if (e.key === 'q' || e.key === 'Q') clutchPress();
+  if (e.key === 'w' || e.key === 'W') gearUp();
+  if (e.key === 's' || e.key === 'S') gearDown();
+  if (e.key === 'Escape') togglePause();
+});
+document.addEventListener('keyup', e => {
+  if (e.key === 'ArrowRight' || e.key === 'd') stopGas();
+  if (e.key === 'ArrowLeft' || e.key === 'a') stopBrake();
+  if (e.key === 'q' || e.key === 'Q') clutchRelease();
+});
+
+// ===== GAME LOOP =====
+let lastTime = 0;
+function gameLoop(ts) {
+  const dt = Math.min((ts - lastTime) / 16.67, 3);
+  lastTime = ts;
+  updatePhysics(dt);
+  draw();
+  animId = requestAnimationFrame(gameLoop);
+}
+
+// ===== SCREEN MANAGEMENT =====
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => { s.classList.remove('active'); s.style.display = 'none'; });
+  const el = document.getElementById(id);
+  el.style.display = 'flex';
+  el.classList.add('active');
+  gameState = id.replace('Screen', '');
+}
+
+function showMenu() { showScreen('menuScreen'); updateHUDGold(); }
+function showGarage() { showScreen('garageScreen'); buildGarage(); updateHUDGold(); }
+function showMapSelect() { showScreen('mapScreen'); buildMapSelect(); updateHUDGold(); }
+function goToMenu() { if (animId) cancelAnimationFrame(animId); showMenu(); }
 
 function startGame() {
-    gameRunning = true;
-    lastTime = performance.now();
+  carDef = CARS.find(c => c.id === player.selectedCar) || CARS[0];
+  mapDef = MAPS.find(m => m.id === player.selectedMap) || MAPS[0];
 
-    // Oyuncuyu sıfırla
-    player = {
-        x: 100,
-        y: getGroundY(100) - 100,
-        vx: 0,
-        vy: 0,
-        angle: 0,
-        angularVelocity: 0,
-        fuel: cars[gameState.currentCar].fuelCapacity,
-        gear: 1,
-        maxGear: 5,
-        clutchPressed: false,
-        distance: 0,
-        coinsCollected: 0,
-        onGround: false
-    };
+  // Reset car state
+  car = {
+    x: 200, y: 300, vx: 0, vy: 0,
+    angle: 0, angularVel: 0,
+    gear: 1, maxGear: carDef.maxGears,
+    rpm: 800, rpmTarget: 800,
+    throttle: 0, braking: false, clutch: false,
+    fuel: carDef.fuelCap, maxFuel: carDef.fuelCap,
+    wheelAngle: 0, dead: false, onGround: false,
+    sessionGold: 0, sessionDist: 0,
+  };
+  keys = { gas: false, brake: false, clutch: false };
+  cameraX = 0;
+  coins = [];
+  particles = [];
+  passedMilestones = new Set();
+  milestoneTimer = 0;
 
-    coins = [];
-    fuels = [];
-    obstacles = [];
-    particles = [];
-    reachedMilestones = [];
+  generateTerrain(mapDef);
+  generateCoinsForSection(0, 4000);
 
-    // İlk nesneleri oluştur
-    coins = spawnCoins(200, 1000);
-    fuels = spawnFuels(300, 1000);
-    obstacles = spawnObstacles(500, 1000);
+  // Position car on terrain
+  car.y = getTerrainY(car.x + cameraX) - WHEEL_RADIUS - 10;
 
-    document.getElementById('main-menu').classList.add('hidden');
-    document.getElementById('hud').classList.remove('hidden');
-    document.getElementById('game-over').classList.add('hidden');
+  showScreen('gameScreen');
+  document.getElementById('gameOver').classList.add('hidden');
+  document.getElementById('pauseMenu').classList.add('hidden');
+  document.getElementById('milestonePopup').classList.add('hidden');
+  paused = false;
+  gameState = 'game';
 
-    updateHUD();
-    animationId = requestAnimationFrame(gameLoop);
+  canvas = document.getElementById('gameCanvas');
+  ctx = canvas.getContext('2d');
+  resizeCanvas();
+
+  if (animId) cancelAnimationFrame(animId);
+  lastTime = performance.now();
+  animId = requestAnimationFrame(gameLoop);
 }
 
-function gameOver() {
-    gameRunning = false;
-    cancelAnimationFrame(animationId);
+function restartGame() { startGame(); }
 
-    // İstatistikler
-    const car = cars[gameState.currentCar];
-    const map = maps[gameState.currentMap];
-
-    let bonusCoins = 0;
-    milestones.forEach(m => {
-        if (player.distance >= m) {
-            bonusCoins += m * 0.5;
-        }
-    });
-
-    // Mesafe bonusu
-    bonusCoins += Math.floor(player.distance * 0.1);
-
-    gameState.coins += bonusCoins;
-    gameState.totalDistance += player.distance;
-    saveGame();
-
-    document.getElementById('final-distance').textContent = player.distance;
-    document.getElementById('final-coins').textContent = player.coinsCollected;
-    document.getElementById('bonus-coins').textContent = bonusCoins;
-
-    document.getElementById('hud').classList.add('hidden');
-    document.getElementById('game-over').classList.remove('hidden');
+function togglePause() {
+  paused = !paused;
+  document.getElementById('pauseMenu').classList.toggle('hidden', !paused);
 }
 
-function showMilestonePopup(distance, reward) {
-    const popup = document.getElementById('milestone-popup');
-    document.getElementById('milestone-distance').textContent = distance;
-    document.getElementById('milestone-reward').textContent = reward;
-    popup.classList.remove('hidden');
-
-    setTimeout(() => {
-        popup.classList.add('hidden');
-    }, 2000);
+function resizeCanvas() {
+  if (!canvas) return;
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
 }
+window.addEventListener('resize', resizeCanvas);
 
-// ===================== MENÜ SİSTEMİ =====================
+// ===== GARAGE BUILDER =====
+function buildGarage() {
+  const grid = document.getElementById('garageGrid');
+  grid.innerHTML = '';
+  for (const c of CARS) {
+    const owned = player.ownedCars.includes(c.id);
+    const selected = player.selectedCar === c.id;
+    const card = document.createElement('div');
+    card.className = 'car-card' + (selected ? ' selected' : '') + (!owned && player.gold < c.price ? ' locked' : '');
 
-function showScreen(screenId) {
-    document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
-    document.getElementById('hud').classList.add('hidden');
-    document.getElementById(screenId).classList.remove('hidden');
-}
+    // Preview canvas
+    const previewCanvas = document.createElement('canvas');
+    previewCanvas.className = 'car-canvas-preview';
+    previewCanvas.width = 160; previewCanvas.height = 80;
+    card.appendChild(previewCanvas);
 
-function showMainMenu() {
-    document.getElementById('menu-coin-count').textContent = gameState.coins;
-    showScreen('main-menu');
-}
+    const name = document.createElement('div');
+    name.className = 'car-name';
+    name.textContent = c.name;
+    card.appendChild(name);
 
-function initGarage() {
-    const list = document.getElementById('car-list');
-    list.innerHTML = '';
+    const desc = document.createElement('div');
+    desc.style.cssText = 'font-size:10px;color:#888;margin-bottom:6px;';
+    desc.textContent = c.description;
+    card.appendChild(desc);
 
-    Object.keys(cars).forEach(carId => {
-        const car = cars[carId];
-        const owned = gameState.ownedCars.includes(carId);
-        const selected = gameState.currentCar === carId;
-
-        const card = document.createElement('div');
-        card.className = `car-card ${!owned ? 'locked' : ''} ${selected ? 'selected' : ''}`;
-        card.innerHTML = `
-            <div class="car-preview">${car.emoji}</div>
-            <h3>${car.name}</h3>
-            <p>Hız: ${car.maxSpeed}</p>
-            <p>Güç: ${Math.floor(car.power * 100)}%</p>
-            <p>Yakıt: ${car.fuelCapacity}</p>
-            ${!owned ? `<div class="car-price">${car.price} 🪙</div>` : '<div style="color:#27ae60">Sahipsin</div>'}
-        `;
-
-        card.addEventListener('click', () => {
-            if (owned) {
-                gameState.currentCar = carId;
-                saveGame();
-                initGarage();
-            } else if (gameState.coins >= car.price) {
-                gameState.coins -= car.price;
-                gameState.ownedCars.push(carId);
-                gameState.currentCar = carId;
-                saveGame();
-                initGarage();
-                document.getElementById('menu-coin-count').textContent = gameState.coins;
-            }
-        });
-
-        list.appendChild(card);
-    });
-}
-
-function initMaps() {
-    const list = document.getElementById('map-list');
-    list.innerHTML = '';
-
-    Object.keys(maps).forEach(mapId => {
-        const map = maps[mapId];
-        const owned = gameState.ownedMaps.includes(mapId);
-        const selected = gameState.currentMap === mapId;
-
-        const card = document.createElement('div');
-        card.className = `map-card ${!owned ? 'locked' : ''} ${selected ? 'selected' : ''}`;
-        card.innerHTML = `
-            <div style="font-size:3rem">${map.emoji}</div>
-            <h3>${map.name}</h3>
-            <p>Zorluk: ${map.hillHeight > 100 ? 'Zor' : map.hillHeight > 80 ? 'Orta' : 'Kolay'}</p>
-            ${!owned ? `<div class="map-price">${map.price} 🪙</div>` : '<div style="color:#27ae60">Sahipsin</div>'}
-        `;
-
-        card.addEventListener('click', () => {
-            if (owned) {
-                gameState.currentMap = mapId;
-                saveGame();
-                initMaps();
-            } else if (gameState.coins >= map.price) {
-                gameState.coins -= map.price;
-                gameState.ownedMaps.push(mapId);
-                gameState.currentMap = mapId;
-                saveGame();
-                initMaps();
-                document.getElementById('menu-coin-count').textContent = gameState.coins;
-            }
-        });
-
-        list.appendChild(card);
-    });
-}
-
-function initSettings() {
-    document.getElementById('volume').value = gameState.settings.volume;
-    document.getElementById('music-toggle').checked = gameState.settings.music;
-    document.getElementById('difficulty').value = gameState.settings.difficulty;
-}
-
-// ===================== KAYDETME =====================
-
-function saveGame() {
-    localStorage.setItem('aliza_coins', gameState.coins);
-    localStorage.setItem('aliza_distance', gameState.totalDistance);
-    localStorage.setItem('aliza_cars', JSON.stringify(gameState.ownedCars));
-    localStorage.setItem('aliza_maps', JSON.stringify(gameState.ownedMaps));
-    localStorage.setItem('aliza_currentCar', gameState.currentCar);
-    localStorage.setItem('aliza_currentMap', gameState.currentMap);
-    localStorage.setItem('aliza_settings', JSON.stringify(gameState.settings));
-}
-
-// ===================== OLAY DİNLEYİCİLERİ =====================
-
-// Gaz
-const gasBtn = document.getElementById('gas-btn');
-gasBtn.addEventListener('mousedown', () => input.gas = true);
-gasBtn.addEventListener('mouseup', () => input.gas = false);
-gasBtn.addEventListener('mouseleave', () => input.gas = false);
-gasBtn.addEventListener('touchstart', (e) => { e.preventDefault(); input.gas = true; });
-gasBtn.addEventListener('touchend', (e) => { e.preventDefault(); input.gas = false; });
-
-// Fren
-const brakeBtn = document.getElementById('brake-btn');
-brakeBtn.addEventListener('mousedown', () => input.brake = true);
-brakeBtn.addEventListener('mouseup', () => input.brake = false);
-brakeBtn.addEventListener('mouseleave', () => input.brake = false);
-brakeBtn.addEventListener('touchstart', (e) => { e.preventDefault(); input.brake = true; });
-brakeBtn.addEventListener('touchend', (e) => { e.preventDefault(); input.brake = false; });
-
-// Debriyaj
-const clutchBtn = document.getElementById('clutch-btn');
-clutchBtn.addEventListener('mousedown', () => {
-    player.clutchPressed = true;
-    clutchBtn.classList.add('active');
-});
-clutchBtn.addEventListener('mouseup', () => {
-    player.clutchPressed = false;
-    clutchBtn.classList.remove('active');
-});
-clutchBtn.addEventListener('mouseleave', () => {
-    player.clutchPressed = false;
-    clutchBtn.classList.remove('active');
-});
-clutchBtn.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    player.clutchPressed = true;
-    clutchBtn.classList.add('active');
-});
-clutchBtn.addEventListener('touchend', (e) => {
-    e.preventDefault();
-    player.clutchPressed = false;
-    clutchBtn.classList.remove('active');
-});
-
-// Vites yükselt
-const gearUpBtn = document.getElementById('gear-up-btn');
-gearUpBtn.addEventListener('click', () => {
-    if (player.gear < player.maxGear) {
-        if (player.clutchPressed) {
-            player.gear++;
-            updateHUD();
-        }
+    const btn = document.createElement('button');
+    btn.className = 'car-select-btn';
+    if (owned) {
+      if (selected) { btn.textContent = '✓ SEÇİLİ'; btn.className += ' active'; }
+      else { btn.textContent = 'SEÇ'; btn.className += ' select'; btn.onclick = () => selectCar(c.id); }
+    } else {
+      btn.textContent = '🪙 ' + c.price + ' SATIN AL';
+      btn.className += ' buy';
+      if (player.gold < c.price) { btn.disabled = true; btn.style.opacity = '0.5'; }
+      else { btn.onclick = () => buyCar(c.id, c.price); }
     }
-});
+    card.appendChild(btn);
 
-// Vites düşür
-const gearDownBtn = document.getElementById('gear-down-btn');
-gearDownBtn.addEventListener('click', () => {
-    if (player.gear > 1) {
-        if (player.clutchPressed) {
-            player.gear--;
-            updateHUD();
-        }
+    grid.appendChild(card);
+
+    // Draw car preview
+    setTimeout(() => drawCarPreview(previewCanvas, c), 0);
+  }
+}
+
+function drawCarPreview(canvas, cdef) {
+  const ctx2 = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx2.clearRect(0, 0, W, H);
+  ctx2.fillStyle = '#0A0A14';
+  ctx2.fillRect(0, 0, W, H);
+  ctx2.save();
+  ctx2.translate(W / 2, H / 2 + 10);
+  ctx2.scale(0.85, 0.85);
+
+  // Simple wheels
+  ctx2.fillStyle = '#222';
+  ctx2.beginPath(); ctx2.arc(-30, 16, 14, 0, Math.PI * 2); ctx2.fill();
+  ctx2.beginPath(); ctx2.arc(30, 16, 14, 0, Math.PI * 2); ctx2.fill();
+  ctx2.fillStyle = '#555';
+  ctx2.beginPath(); ctx2.arc(-30, 16, 6, 0, Math.PI * 2); ctx2.fill();
+  ctx2.beginPath(); ctx2.arc(30, 16, 6, 0, Math.PI * 2); ctx2.fill();
+
+  // Body
+  const bw = cdef.bodyW * 0.7, bh = cdef.bodyH * 0.7;
+  const bodyGrad = ctx2.createLinearGradient(0, -bh, 0, bh / 2);
+  bodyGrad.addColorStop(0, lightenColor(cdef.color, 40));
+  bodyGrad.addColorStop(1, darkenColor(cdef.color, 20));
+  ctx2.fillStyle = bodyGrad;
+  ctx2.shadowBlur = 12; ctx2.shadowColor = cdef.color;
+  ctx2.beginPath();
+  ctx2.moveTo(-bw / 2, bh / 2);
+  ctx2.lineTo(bw / 2, bh / 2);
+  ctx2.lineTo(bw / 2, -bh * 0.2);
+  ctx2.lineTo(bw * 0.3, -bh);
+  ctx2.lineTo(-bw * 0.25, -bh);
+  ctx2.lineTo(-bw / 2, -bh * 0.2);
+  ctx2.closePath(); ctx2.fill();
+
+  // Window
+  ctx2.fillStyle = 'rgba(150,220,255,0.5)';
+  ctx2.shadowBlur = 0;
+  ctx2.beginPath();
+  ctx2.moveTo(-bw * 0.2, -bh * 0.8);
+  ctx2.lineTo(bw * 0.22, -bh * 0.8);
+  ctx2.lineTo(bw * 0.28, -bh * 0.25);
+  ctx2.lineTo(-bw * 0.2, -bh * 0.25);
+  ctx2.closePath(); ctx2.fill();
+
+  ctx2.restore();
+}
+
+function selectCar(id) {
+  player.selectedCar = id;
+  save(); buildGarage();
+}
+
+function buyCar(id, price) {
+  if (player.gold < price) return;
+  player.gold -= price;
+  player.ownedCars.push(id);
+  player.selectedCar = id;
+  save(); updateHUDGold(); buildGarage();
+}
+
+// ===== MAP BUILDER =====
+function buildMapSelect() {
+  const grid = document.getElementById('mapGrid');
+  grid.innerHTML = '';
+  for (const m of MAPS) {
+    const owned = player.ownedMaps.includes(m.id);
+    const selected = player.selectedMap === m.id;
+    const card = document.createElement('div');
+    card.className = 'map-card' + (selected ? ' selected' : '') + (!owned && player.gold < m.price ? ' locked' : '');
+
+    const preview = document.createElement('div');
+    preview.className = 'map-preview';
+    const previewCanvas = document.createElement('canvas');
+    previewCanvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
+    previewCanvas.width = 200; previewCanvas.height = 100;
+    drawMapPreview(previewCanvas, m);
+    preview.style.position = 'relative'; preview.style.overflow = 'hidden';
+    preview.appendChild(previewCanvas);
+    const emojiSpan = document.createElement('span');
+    emojiSpan.style.cssText = 'position:relative;z-index:2;font-size:36px;';
+    emojiSpan.textContent = m.emoji;
+    preview.appendChild(emojiSpan);
+    card.appendChild(preview);
+
+    const info = document.createElement('div');
+    info.className = 'map-info';
+    info.innerHTML = `<div class="map-name">${m.name}</div>`;
+
+    if (owned) {
+      if (selected) {
+        info.innerHTML += `<div class="map-owned">✓ SEÇİLİ</div>`;
+      } else {
+        info.innerHTML += `<button class="car-select-btn select" style="width:100%;margin-top:6px;">SEÇ</button>`;
+        card.onclick = () => { player.selectedMap = m.id; save(); buildMapSelect(); };
+      }
+    } else {
+      info.innerHTML += `<div class="map-price">🪙 ${m.price}</div>`;
+      if (player.gold >= m.price) {
+        const buyBtn = document.createElement('button');
+        buyBtn.className = 'car-select-btn buy';
+        buyBtn.style.cssText = 'width:100%;margin-top:6px;';
+        buyBtn.textContent = 'SATIN AL';
+        buyBtn.onclick = e => { e.stopPropagation(); buyMap(m.id, m.price); };
+        info.appendChild(buyBtn);
+      } else {
+        info.innerHTML += `<div style="font-size:11px;color:#555;margin-top:4px;">Yetersiz altın</div>`;
+      }
     }
-});
 
-// Klavye kontrolleri
-document.addEventListener('keydown', (e) => {
-    switch(e.key) {
-        case 'ArrowRight':
-        case 'd':
-        case 'D':
-            input.gas = true;
-            gasBtn.classList.add('active');
-            break;
-        case 'ArrowLeft':
-        case 'a':
-        case 'A':
-            input.brake = true;
-            brakeBtn.classList.add('active');
-            break;
-        case 'Shift':
-        case 'c':
-        case 'C':
-            player.clutchPressed = true;
-            clutchBtn.classList.add('active');
-            break;
-        case 'w':
-        case 'W':
-        case 'ArrowUp':
-            if (player.clutchPressed && player.gear < player.maxGear) {
-                player.gear++;
-                updateHUD();
-            }
-            break;
-        case 's':
-        case 'S':
-        case 'ArrowDown':
-            if (player.clutchPressed && player.gear > 1) {
-                player.gear--;
-                updateHUD();
-            }
-            break;
-    }
-});
+    const diffStr = '⭐'.repeat(m.difficulty);
+    info.innerHTML += `<div style="font-size:11px;color:#888;margin-top:4px;">Zorluk: ${diffStr}</div>`;
+    card.appendChild(info);
+    grid.appendChild(card);
+  }
+}
 
-document.addEventListener('keyup', (e) => {
-    switch(e.key) {
-        case 'ArrowRight':
-        case 'd':
-        case 'D':
-            input.gas = false;
-            gasBtn.classList.remove('active');
-            break;
-        case 'ArrowLeft':
-        case 'a':
-        case 'A':
-            input.brake = false;
-            brakeBtn.classList.remove('active');
-            break;
-        case 'Shift':
-        case 'c':
-        case 'C':
-            player.clutchPressed = false;
-            clutchBtn.classList.remove('active');
-            break;
-    }
-});
+function drawMapPreview(canvas, mapDef) {
+  const ctx2 = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const skyG = ctx2.createLinearGradient(0, 0, 0, H);
+  skyG.addColorStop(0, mapDef.skyTop); skyG.addColorStop(1, mapDef.skyBot);
+  ctx2.fillStyle = skyG; ctx2.fillRect(0, 0, W, H);
 
-// Menü butonları
-document.getElementById('play-btn').addEventListener('click', startGame);
-document.getElementById('restart-btn').addEventListener('click', startGame);
-document.getElementById('menu-btn').addEventListener('click', showMainMenu);
+  // Simple terrain preview
+  ctx2.beginPath();
+  ctx2.moveTo(0, H);
+  const pts = [H * 0.6, H * 0.5, H * 0.65, H * 0.45, H * 0.7, H * 0.55, H * 0.4, H * 0.6];
+  for (let i = 0; i < pts.length; i++) {
+    ctx2.lineTo(i * W / (pts.length - 1), pts[i]);
+  }
+  ctx2.lineTo(W, H); ctx2.closePath();
+  ctx2.fillStyle = mapDef.groundColor; ctx2.fill();
+}
 
-document.getElementById('garage-btn').addEventListener('click', () => {
-    initGarage();
-    showScreen('garage-screen');
-});
+function buyMap(id, price) {
+  if (player.gold < price) return;
+  player.gold -= price;
+  player.ownedMaps.push(id);
+  player.selectedMap = id;
+  save(); updateHUDGold(); buildMapSelect();
+}
 
-document.getElementById('maps-btn').addEventListener('click', () => {
-    initMaps();
-    showScreen('maps-screen');
-});
-
-document.getElementById('settings-btn').addEventListener('click', () => {
-    initSettings();
-    showScreen('settings-screen');
-});
-
-document.getElementById('back-from-garage').addEventListener('click', showMainMenu);
-document.getElementById('back-from-maps').addEventListener('click', showMainMenu);
-document.getElementById('back-from-settings').addEventListener('click', () => {
-    gameState.settings.volume = parseInt(document.getElementById('volume').value);
-    gameState.settings.music = document.getElementById('music-toggle').checked;
-    gameState.settings.difficulty = document.getElementById('difficulty').value;
-    saveGame();
-    showMainMenu();
-});
-
-// ===================== BAŞLATMA =====================
-
-showMainMenu();
+// ===== INIT =====
+load();
+updateHUDGold();
+showMenu();
